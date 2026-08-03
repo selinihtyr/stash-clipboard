@@ -1,0 +1,225 @@
+import AppKit
+import ApplicationServices
+import Carbon.HIToolbox
+import Filters
+import HotKey
+import StashCore
+import Store
+import SwiftUI
+
+/// Bir sonraki tuş vuruşunu yakalayıp bir `KeyCombo`ya çevirir. Global bir
+/// olay musluğu (CGEventTap) Erişilebilirlik izni ister; pencere zaten öndeyken
+/// tek bir tuşu yakalamak için yerel bir izleyici yeterli ve izin istemiyor —
+/// izinsiz açılışın (bkz. HotKeyCenter'daki RegisterEventHotKey tercihi) aynı
+/// gerekçesi burada da geçerli.
+@MainActor
+final class ShortcutRecorder: ObservableObject {
+    @Published private(set) var isRecording = false
+    private var monitor: Any?
+
+    func start(onCapture: @escaping (KeyCombo) -> Void) {
+        stop()
+        isRecording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+            guard let self else { return event }
+            if event.keyCode == UInt16(kVK_Escape) { self.stop(); return nil }
+            var modifiers: UInt32 = 0
+            if event.modifierFlags.contains(.command) { modifiers |= KeyCombo.command }
+            if event.modifierFlags.contains(.option) { modifiers |= KeyCombo.option }
+            if event.modifierFlags.contains(.control) { modifiers |= KeyCombo.control }
+            if event.modifierFlags.contains(.shift) { modifiers |= KeyCombo.shift }
+            // Değiştiricisiz bir global kısayol her yerde normal yazmayı
+            // yutar; boş basışları görmezden gelip izlemeye devam ediyoruz.
+            guard modifiers != 0 else { return nil }
+            self.stop()
+            onCapture(KeyCombo(keyCode: UInt32(event.keyCode), modifiers: modifiers))
+            return nil // Tuşu yut: pencereye gitmesin, sistem beep çalmasın.
+        }
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        isRecording = false
+    }
+}
+
+struct SettingsView: View {
+    // `Settings` çıplak yazılınca SwiftUI.Settings (bir Scene tipi) ile
+    // çakışıyor; StashCore.Settings modül önekiyle belirtiliyor.
+    @State var settings: StashCore.Settings
+    let store: ClipStore
+    let onChange: (StashCore.Settings) -> Void
+    @StateObject private var recorder = ShortcutRecorder()
+    @State private var diskText = "hesaplanıyor…"
+    @State private var shelves: [Shelf] = []
+    @State private var newShelfName = ""
+    @State private var errorAlert: AlertMessage?
+
+    struct AlertMessage: Identifiable { let id = UUID(); let title: String; let detail: String }
+
+    var body: some View {
+        Form {
+            Section("Kısayol") {
+                HStack {
+                    LabeledContent("Şeridi aç", value: settings.combo.displayString)
+                    Spacer()
+                    Button(recorder.isRecording ? "Dinleniyor…" : "Değiştir") {
+                        recorder.start { combo in
+                            settings.combo = combo
+                            onChange(settings)
+                        }
+                    }
+                    .disabled(recorder.isRecording)
+                }
+                Text(recorder.isRecording
+                     ? "Yeni kombinasyona bas. Vazgeçmek için Esc."
+                     : "Değiştirmek için “Değiştir”e bas, sonra yeni kombinasyona bas.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Yapıştırma filtreleri") {
+                ForEach(PasteFilter.allCases, id: \.self) { filter in
+                    Toggle(title(for: filter), isOn: binding(for: filter))
+                }
+                Text("Filtreler ⌥↵ ile yapıştırırken listedeki sırayla uygulanır.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Kaydedilmeyecek uygulamalar") {
+                ForEach(Array(settings.blockedBundleIDs).sorted(), id: \.self) { id in
+                    HStack {
+                        Text(id).font(.system(.body, design: .monospaced))
+                        Spacer()
+                        Button("Kaldır") {
+                            settings.blockedBundleIDs.remove(id); onChange(settings)
+                        }
+                    }
+                }
+            }
+            Section("Raflar") {
+                ForEach(shelves) { shelf in
+                    HStack {
+                        Text(shelf.name)
+                        Spacer()
+                        Button("Yeniden adlandır") { renameShelf(shelf) }
+                            .buttonStyle(.borderless)
+                        Button("Sil", role: .destructive) { confirmDeleteShelf(shelf) }
+                            .buttonStyle(.borderless)
+                    }
+                }
+                HStack {
+                    TextField("Yeni raf", text: $newShelfName)
+                    Button("Ekle", action: createShelf)
+                }
+                Text("Bir rafı silmek içindeki kartları silmez, kartlar sadece rafsız kalır.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Geçmiş") {
+                LabeledContent("Görsellerin kapladığı alan", value: diskText)
+                Button("Son bir saati temizle") {
+                    try? store.deleteCreated(after: Date().addingTimeInterval(-3600))
+                    refresh()
+                }
+                Button("Tümünü temizle", role: .destructive) {
+                    try? store.deleteAll(); refresh()
+                }
+                Text("Sabitlediğin kartlar temizlemelerden etkilenmez.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("İzin") {
+                LabeledContent("Erişilebilirlik",
+                               value: AXIsProcessTrusted() ? "verildi" : "verilmedi")
+                if !AXIsProcessTrusted() {
+                    Button("Sistem Ayarları'nı aç") {
+                        NSWorkspace.shared.open(URL(string:
+                            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+                    }
+                    Text("İzin olmadan Stash yapıştırmaz, sadece panoya kopyalar.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 460, height: 620)
+        .onAppear(perform: refresh)
+        .onDisappear { recorder.stop() }
+        .alert(item: $errorAlert) { message in
+            Alert(title: Text(message.title), message: Text(message.detail),
+                 dismissButton: .default(Text("Tamam")))
+        }
+    }
+
+    private func refresh() {
+        refreshShelves()
+        let bytes = (try? store.imagesByteSize()) ?? 0
+        diskText = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+    }
+
+    private func refreshShelves() {
+        shelves = (try? store.shelves()) ?? []
+    }
+
+    private func createShelf() {
+        do {
+            _ = try store.createShelf(name: newShelfName)
+            newShelfName = ""
+            refreshShelves()
+        } catch {
+            // Boş ad StoreError ile düşer; sessizce hiçbir şey olmamış gibi
+            // davranmak kullanıcıyı neyin ters gittiği konusunda karanlıkta
+            // bırakır — bkz. AppDelegate.createShelfAndMoveSelected'daki
+            // aynı gerekçe.
+            errorAlert = AlertMessage(title: "Raf oluşturulamadı", detail: "\(error)")
+        }
+    }
+
+    private func renameShelf(_ shelf: Shelf) {
+        let alert = NSAlert()
+        alert.messageText = "Rafı yeniden adlandır"
+        alert.addButton(withTitle: "Kaydet")
+        alert.addButton(withTitle: "Vazgeç")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
+        field.stringValue = shelf.name
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try store.renameShelf(shelf.id, to: field.stringValue)
+            refreshShelves()
+        } catch {
+            errorAlert = AlertMessage(title: "Yeniden adlandırılamadı", detail: "\(error)")
+        }
+    }
+
+    private func confirmDeleteShelf(_ shelf: Shelf) {
+        let alert = NSAlert()
+        alert.messageText = "“\(shelf.name)” rafını sil?"
+        alert.informativeText = "Raftaki kartlar silinmez, sadece rafsız kalır."
+        alert.addButton(withTitle: "Sil")
+        alert.addButton(withTitle: "Vazgeç")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try store.deleteShelf(shelf.id)
+            refreshShelves()
+        } catch {
+            errorAlert = AlertMessage(title: "Silinemedi", detail: "\(error)")
+        }
+    }
+
+    private func title(for filter: PasteFilter) -> String {
+        switch filter {
+        case .plainText: return "Düz metin olarak yapıştır"
+        case .collapseWhitespace: return "Fazla boşlukları temizle"
+        case .straightenQuotes: return "Akıllı tırnakları düzelt"
+        }
+    }
+
+    private func binding(for filter: PasteFilter) -> Binding<Bool> {
+        Binding(
+            get: { settings.activeFilters.contains(filter) },
+            set: { isOn in
+                if isOn { settings.activeFilters.append(filter) }
+                else { settings.activeFilters.removeAll { $0 == filter } }
+                onChange(settings)
+            })
+    }
+}

@@ -57,6 +57,23 @@ private func capture(_ pb: FakePasteboard, blocked: Set<String> = []) -> ClipCap
         .poll(frontmostBundleID: "com.1password.1password") == nil)
 }
 
+@Test func updatingPolicyAfterConstructionBlocksSubsequentPolls() {
+    // Ayarlar penceresi kara listeyi uygulama çalışırken değiştirebilir
+    // (Task 13). `policy` bir `let` olsaydı bu asla gerçekleşmezdi ve kullanıcı
+    // az önce engellediği bir uygulamadan kopyalanmaya devam ederdi.
+    let pb = FakePasteboard(); pb.put(text: "parola")
+    let c = capture(pb)
+    c.updatePolicy(CapturePolicy(blockedBundleIDs: ["com.1password.1password"]))
+    #expect(c.poll(frontmostBundleID: "com.1password.1password") == nil)
+}
+
+@Test func updatingPolicyCanAlsoUnblockAnApp() {
+    let pb = FakePasteboard(); pb.put(text: "merhaba")
+    let c = capture(pb, blocked: ["com.example.app"])
+    c.updatePolicy(CapturePolicy())
+    #expect(c.poll(frontmostBundleID: "com.example.app")?.text == "merhaba")
+}
+
 @Test func urlsAreRecognisedAsLinks() {
     let pb = FakePasteboard(); pb.put(text: "https://girltalk.social")
     #expect(capture(pb).poll(frontmostBundleID: nil)?.kind == .link)

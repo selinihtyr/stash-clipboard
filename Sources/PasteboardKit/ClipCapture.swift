@@ -27,11 +27,21 @@ public final class ClipCapture {
     ]
 
     private let pasteboard: PasteboardReading
-    private let policy: CapturePolicy
+    private var policy: CapturePolicy
     private var lastChangeCount: Int?
 
     public init(pasteboard: PasteboardReading, policy: CapturePolicy) {
         self.pasteboard = pasteboard
+        self.policy = policy
+    }
+
+    /// Ayarlar penceresinden kara liste değişince çağrılır. `policy` bir `let`
+    /// olsaydı çalışan yakalama, kullanıcı bir uygulamayı az önce engellediği
+    /// halde ondan kopyalamayı sürdürürdü — ayarlar arayüzü yalan söylemiş
+    /// olurdu (bkz. Task 8 incelemesi, Task 13'e taşınan bulgu). Yoklama
+    /// döngüsünü yeniden kurmadan (zamanlayıcıyı tekrar başlatmadan) canlı
+    /// güncelleme yapmanın en dar yolu bu.
+    public func updatePolicy(_ policy: CapturePolicy) {
         self.policy = policy
     }
 

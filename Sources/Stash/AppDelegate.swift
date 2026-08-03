@@ -14,6 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var coordinator: CaptureCoordinator?
     private var model: StripModel?
     private var settings = Settings.load()
+    private var store: ClipStore?
+    private var capture: ClipCapture?
+    private var settingsController: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -27,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                in: .userDomainMask)[0]
                 .appendingPathComponent("Stash")
             let store = try ClipStore(directory: dir)
+            self.store = store
             let engine = PasteEngine(pasteboard: SystemPasteboardWriter(),
                                      keystrokes: SystemKeystrokeSender())
             let model = StripModel(store: store, engine: engine, settings: settings)
@@ -35,8 +39,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // blockedBundleIDs burada ClipCapture'a ulaşmazsa uygulamanın
             // merkezi mahremiyet sözü (şifre yöneticilerinden asla kopya
             // kaydetme) hiçbir yerde uygulanmamış olur — bkz. Task 8 incelemesi.
+            // `capture`'ı da tutuyoruz: ayarlar penceresinde kara liste
+            // değişince updatePolicy(_:) ile canlı güncellenmesi gerekiyor,
+            // yoksa çalışan yakalama kullanıcının az önce engellediği
+            // uygulamadan kopyalamayı sürdürür (bkz. Task 13 için taşınan bulgu).
             let capture = ClipCapture(pasteboard: SystemPasteboard(),
                                       policy: CapturePolicy(blockedBundleIDs: settings.blockedBundleIDs))
+            self.capture = capture
             let coordinator = CaptureCoordinator(store: store, capture: capture)
             coordinator.onCapture = { [weak self] in try? self?.model?.reload() }
             coordinator.onError = { [weak self] _ in
@@ -91,8 +100,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Stash'i aç", action: #selector(toggleStrip), keyEquivalent: "")
             .target = self
         menu.addItem(.separator())
+        menu.addItem(withTitle: "Ayarlar…", action: #selector(openSettings), keyEquivalent: ",")
+            .target = self
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Çık", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
+    }
+
+    /// Pencereyi tek bir kontrolcü üzerinden tutuyoruz: her açılışta yeni bir
+    /// tane kurmak eskisinin kapatılmadan arkada birikmesine (ve kullanıcının
+    /// aynı anda birden çok ayarlar penceresi görmesine) yol açardı.
+    @objc func openSettings() {
+        guard let store = self.store else { return }
+        let controller = settingsController ?? SettingsWindowController(
+            settings: settings, store: store) { [weak self] updated in
+                guard let self else { return }
+                self.settings = updated
+                updated.save()
+                // Kara liste değiştiyse çalışan yakalama bunu görmezse ayarlar
+                // penceresi yalan söylemiş olur — kullanıcı bir uygulamayı
+                // engelledi sanır, yakalama eski listeyle sürer (bkz. Task 8
+                // incelemesinden Task 13'e taşınan bulgu).
+                self.capture?.updatePolicy(CapturePolicy(blockedBundleIDs: updated.blockedBundleIDs))
+                // Kısayol değiştiyse yeniden kaydet: eski kombinasyon canlı
+                // kalırsa kullanıcı iki kısayolla açar ve sebebini anlamaz.
+                // register(_:handler:) her çağrıda önce unregister() çalıştırır,
+                // yani burada ikinci bir merkez değil, aynı `hotKey` yeniden
+                // kaydolur.
+                self.registerHotKey()
+                self.model?.settings = updated
+            }
+        settingsController = controller
+        controller.present()
     }
 
     @objc func toggleStrip() {
