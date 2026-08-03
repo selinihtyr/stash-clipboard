@@ -24,5 +24,6 @@ let package = Package(
                     dependencies: ["StashCore", "Store", "PasteEngine", "Filters"]),
         .executableTarget(name: "Stash", dependencies: ["StashCore", "HotKey"],
                           exclude: ["Info.plist"]),
+        .testTarget(name: "StashTests", dependencies: ["Stash"]),
     ]
 )

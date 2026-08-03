@@ -102,6 +102,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let host = NSHostingView(rootView: StripView(model: model))
         let panel = self.panel ?? StripPanel(contentView: host)
         panel.contentView = host
+        // dismiss() panelin kapandığı HER yoldan geçer (Escape, tekrar
+        // kısayola basma, dışarı tıklama) — süzgeci tek bir yerde temizlemek
+        // için doğru kanca burası; her çağıran yerin bunu hatırlaması gerekmez.
+        panel.onDismiss = { [weak self] in self?.model?.query = "" }
         panel.onKey = { [weak self] event in
             guard let self, let model = self.model else { return false }
             guard let command = stripCommand(keyCode: event.keyCode,
@@ -123,8 +127,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .delete: try? model.deleteSelected()
             case .nextTab: self.advanceTab()
             case .dismiss:
-                // Bir sonraki açılış eski süzgeçle değil temiz gelsin.
-                model.query = ""
                 self.panel?.dismiss()
             case .type(let char):
                 model.query.append(char)
@@ -142,10 +144,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// kullanıcıyı kör bırakır — özellikle klavyeden gidiliyorsa görsel bir
     /// ipucu yok, tek geri bildirim bu.
     private func finishPaste(_ outcome: PasteOutcome?) {
+        guard let outcome else {
+            // nil = seçili bir şey yok ya da seçili kartın yapıştırılacak
+            // içeriği yok (boş şerit, ya da Return'e basılan an). Hiçbir şey
+            // seçilmediyse hiçbir şey kapanmamalı — panel açık kalır, zaten
+            // boş durumda başlıktaki "Henüz bir şey kopyalamadın." zaten
+            // sebebini söylüyor; ayrı bir uyarıya gerek yok.
+            return
+        }
         panel?.dismiss()
-        model?.query = ""
         switch outcome {
-        case nil, .pastedIntoFrontmostApp:
+        case .pastedIntoFrontmostApp:
             return
         case .copiedOnlyNoAccessibilityPermission:
             // Sessizce kopyalayıp bırakmıyoruz: kullanıcı ⌘V beklerken hiçbir şey
