@@ -102,18 +102,39 @@ public final class ClipStore {
         defer { sqlite3_finalize(stmt) }
         var out: [Clip] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
-            out.append(Clip(
-                id: UUID(uuidString: column(stmt, 0) ?? "") ?? UUID(),
-                createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 1)),
-                kind: ClipKind(rawValue: column(stmt, 2) ?? "text") ?? .text,
-                text: column(stmt, 3), imagePath: column(stmt, 4),
-                sourceBundleID: column(stmt, 5), sourceName: column(stmt, 6),
-                pinned: sqlite3_column_int(stmt, 7) == 1,
-                shelfID: column(stmt, 8).flatMap(UUID.init(uuidString:)),
-                contentHash: column(stmt, 9) ?? "",
-                byteSize: Int(sqlite3_column_int64(stmt, 10))))
+            out.append(rowToClip(stmt))
         }
         return out
+    }
+
+    private func rowToClip(_ stmt: OpaquePointer?) -> Clip {
+        Clip(
+            id: UUID(uuidString: column(stmt, 0) ?? "") ?? UUID(),
+            createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 1)),
+            kind: ClipKind(rawValue: column(stmt, 2) ?? "text") ?? .text,
+            text: column(stmt, 3), imagePath: column(stmt, 4),
+            sourceBundleID: column(stmt, 5), sourceName: column(stmt, 6),
+            pinned: sqlite3_column_int(stmt, 7) == 1,
+            shelfID: column(stmt, 8).flatMap(UUID.init(uuidString:)),
+            contentHash: column(stmt, 9) ?? "",
+            byteSize: Int(sqlite3_column_int64(stmt, 10)))
+    }
+
+    /// Verilen contentHash için satırı arar (varsa). CaptureCoordinator bunu
+    /// bir görsel dosyası diske yazmadan ÖNCE çağırır: içerik zaten
+    /// depolanıyorsa upsert zaten var olan satırı günceller ve imagePath'e
+    /// dokunmaz, dolayısıyla yeni dosya hiç yazılmamalı — yazıp sonra silmek
+    /// yerine baştan atlamak, hiçbir satırın işaret etmediği dosya bırakmaz.
+    public func find(contentHash: String) throws -> Clip? {
+        let sql = "SELECT * FROM clips WHERE contentHash = ? LIMIT 1;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw StoreError.queryFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bindText(stmt, 1, contentHash)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        return rowToClip(stmt)
     }
 
     /// LIKE joker karakterlerini kaçırır. Bunu yapmazsak kullanıcının yazdığı

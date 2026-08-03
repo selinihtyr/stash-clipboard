@@ -36,9 +36,15 @@ public final class CaptureCoordinator {
         do {
             let id = UUID()
             var imagePath: String?
+            // Aynı içerik zaten depolanıyorsa upsert var olan satırı günceller
+            // (imagePath'e dokunmadan) — burada yeni bir dosya yazarsak hiçbir
+            // satır ona işaret etmez ve orphan dosya, imagesByteSize() üzerinden
+            // pruneImages'ı bozar (görülemeyen dosyalar hedefi hep yüksek tutar).
+            // Önce kontrol ederek "yaz sonra sil" dansından da kaçınıyoruz.
+            let alreadyStored = try store.find(contentHash: captured.contentHash) != nil
             // Diske yazma satır eklemeden önce olmalı: yazma başarısız olursa
             // hiç var olmayan bir dosyaya işaret eden satır oluşmaz.
-            if let data = captured.imageData {
+            if !alreadyStored, let data = captured.imageData {
                 let url = store.imagesDirectory.appendingPathComponent("\(id.uuidString).png")
                 try data.write(to: url)
                 imagePath = url.path
