@@ -57,6 +57,19 @@ private func textClip(_ text: String, at seconds: TimeInterval = 0) -> Clip {
     #expect(try store.recent(limit: 10).map(\.text) == ["dün"])
 }
 
+@Test func deleteCreatedAfterKeepsPinnedClips() throws {
+    // deleteAllKeepsPinnedClips zaten deleteAll() için bu garantiyi kanıtlıyor;
+    // deleteCreated(after:) kendi kesim tarihinden SONRA oluşmuş sabit bir klip
+    // olmadan aynı korumaya sahip görünebilir ama aslında sınanmamış olurdu.
+    let store = try makeStore()
+    let kept = textClip("sabit ama yeni", at: 9_000)
+    try store.insert(kept)
+    try store.insert(textClip("yeni ve gidici", at: 9_500))
+    try store.setPinned(true, id: kept.id)
+    try store.deleteCreated(after: Date(timeIntervalSince1970: 5_000))
+    #expect(try store.recent(limit: 10).map(\.text) == ["sabit ama yeni"])
+}
+
 @Test func deleteAllKeepsPinnedClips() throws {
     // "Tümünü temizle" sabitlediklerini de silseydi raf fikri anlamsız olurdu;
     // kullanıcı onları bilerek ayırmış.
