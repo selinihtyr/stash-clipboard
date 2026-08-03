@@ -99,9 +99,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let panel, panel.isVisible { panel.dismiss(); return }
         guard let model else { return }
         try? model.reload()
-        let host = NSHostingView(rootView: Text("Şerit buraya gelecek")
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black.opacity(0.9)))
+        let host = NSHostingView(rootView: StripView(model: model,
+                                                      onDismiss: { [weak self] in
+            self?.panel?.dismiss()
+        }))
         let panel = self.panel ?? StripPanel(contentView: host)
         panel.contentView = host
         self.panel = panel
