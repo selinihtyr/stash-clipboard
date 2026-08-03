@@ -152,6 +152,57 @@ public final class ClipStore {
         try exec("DELETE FROM clips WHERE pinned = 0;")
     }
 
+    /// Aynı içerik tekrar kopyalandığında yeni satır açmaz; mevcut satırın
+    /// tarihini günceller, böylece kart listenin başına döner ve geçmiş
+    /// aynı şeyin kopyalarıyla dolmaz.
+    public func upsert(_ clip: Clip) throws {
+        let sql = """
+            UPDATE clips SET createdAt = \(clip.createdAt.timeIntervalSince1970),
+                             sourceBundleID = \(clip.sourceBundleID.map { "'\($0)'" } ?? "NULL"),
+                             sourceName = \(clip.sourceName.map { "'\($0)'" } ?? "NULL")
+            WHERE contentHash = '\(clip.contentHash.replacingOccurrences(of: "'", with: "''"))';
+            """
+        try exec(sql)
+        if sqlite3_changes(db) == 0 { try insert(clip) }
+    }
+
+    public func imagesByteSize() throws -> Int {
+        let fm = FileManager.default
+        let files = (try? fm.contentsOfDirectory(at: imagesDirectory,
+                                                 includingPropertiesForKeys: [.fileSizeKey])) ?? []
+        return files.reduce(0) { total, url in
+            total + ((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
+    }
+
+    /// `highWater` aşıldığında en eski görselleri `lowWater`'ın altına inene
+    /// kadar siler. Satırlar kalır: kart "görsel artık saklanmıyor" diyebilsin.
+    /// Sabitlenmiş kartların görselleri hiç budanmaz.
+    @discardableResult
+    public func pruneImages(highWater: Int, lowWater: Int) throws -> Int {
+        var size = try imagesByteSize()
+        guard size > highWater else { return 0 }
+        let candidates = try query("""
+            SELECT * FROM clips
+            WHERE imagePath IS NOT NULL AND pinned = 0
+            ORDER BY createdAt ASC
+            """)
+        var removed = 0
+        let fm = FileManager.default
+        for clip in candidates {
+            guard size > lowWater, let path = clip.imagePath else { break }
+            // Boyutu dosya silinmeden ÖNCE oku: silindikten sonra okumak
+            // hep 0 döner ve döngü hiçbir zaman lowWater'a yakınsamaz.
+            let bytes = (try? fm.attributesOfItem(atPath: path)[.size] as? Int) ?? 0
+            try? fm.removeItem(atPath: path)
+            try? fm.removeItem(at: thumbsDirectory.appendingPathComponent("\(clip.id.uuidString).jpg"))
+            try exec("UPDATE clips SET imagePath = NULL WHERE id = '\(clip.id.uuidString)';")
+            size -= bytes
+            removed += 1
+        }
+        return removed
+    }
+
     private func bindText(_ stmt: OpaquePointer?, _ index: Int32, _ value: String?) {
         if let value { sqlite3_bind_text(stmt, index, value, -1, SQLITE_TRANSIENT) }
         else { sqlite3_bind_null(stmt, index) }
