@@ -32,6 +32,12 @@ public final class StripModel: ObservableObject {
     }
 
     public func reload() throws {
+        // Raflar önce tazelenir: tab silinmiş bir rafı gösteriyorsa
+        // reloadShelves onu .all'a düşürür, filtre bunu geçerli tab ile
+        // hesaplar. Sırayı tersine çevirirsek bir kart görmeden boş bir
+        // şeride ve sekme çubuğunda hiçbir şeyin seçili görünmediği bir
+        // ara duruma düşülür.
+        try reloadShelves()
         let base = query.isEmpty
             ? try store.recent(limit: Self.pageSize)
             : try store.search(query, limit: Self.pageSize)
@@ -45,10 +51,19 @@ public final class StripModel: ObservableObject {
         }
         // Liste değiştiğinde eski indekste kalmak yanlış kartı yapıştırır.
         selectedIndex = 0
-        try reloadShelves()
     }
 
-    public func reloadShelves() throws { shelves = try store.shelves() }
+    /// Rafları tazeler ve aktif tab artık var olmayan bir rafa işaret
+    /// ediyorsa .all'a düşürür. Burada durmasının sebebi: bu, reload() dahil
+    /// rafları değiştirebilecek HER yolun geçtiği tek nokta (reload, ⌃S'teki
+    /// createShelf) — tab düzeltmesini tek bir çağrı yerine buraya koymak,
+    /// bir sonraki raf-değiştiren kod yolunun bunu unutmasını imkansız kılar.
+    public func reloadShelves() throws {
+        shelves = try store.shelves()
+        if case .shelf(let id) = tab, !shelves.contains(where: { $0.id == id }) {
+            tab = .all
+        }
+    }
 
     /// Şerit penceresi doğrudan ClipStore'a erişmiyor; ⌃S menüsü "önce raf
     /// yoksa oluştur" akışını burada tetikler ki store bağımlılığı model

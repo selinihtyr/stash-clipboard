@@ -119,6 +119,21 @@ private func makeModel(_ texts: [String]) throws -> (StripModel, ClipStore, Reco
     #expect(model.shelves.map(\.name) == ["İş"])
 }
 
+@MainActor @Test func deletingTheActiveShelfFallsBackToAllOnReload() throws {
+    // Task 13 rafları silmek için bir UI ekleyecek; o an geldiğinde aktif
+    // tab silinen rafa işaret ediyor olabilir. reload() kendini düzeltip
+    // .all'a dönmeli, yoksa kullanıcı boş bir şeritte hiçbir sekmenin
+    // seçili görünmediği bir çıkmaza düşer.
+    let (model, store, _) = try makeModel(["bir", "iki"])
+    let shelf = try model.createShelf(name: "İş")
+    model.tab = .shelf(shelf.id)
+    try model.reload()
+    try store.deleteShelf(shelf.id)
+    try model.reload()
+    #expect(model.tab == .all)
+    #expect(model.visible.map(\.text) == ["iki", "bir"])
+}
+
 @MainActor @Test func defaultBlocklistCoversThePasswordManagers() {
     #expect(Settings.defaults.blockedBundleIDs.contains("com.1password.1password"))
     #expect(Settings.defaults.blockedBundleIDs.contains("com.apple.keychainaccess"))
