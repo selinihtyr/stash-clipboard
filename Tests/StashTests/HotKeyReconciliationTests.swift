@@ -34,11 +34,17 @@ private let comboB = KeyCombo(keyCode: KeyCombo.keyCodeV, modifiers: KeyCombo.co
 
 @Test func failedNewComboRevertsToThePreviousWorkingCombo() {
     // Kritik bulgu: yeni kombinasyon reddedilirse kullanıcı kısayolsuz
-    // kalmamalı — önceki kaydediliyor.
+    // kalmamalı — önceki kaydediliyor. Sadece dönüş değerine bakmak
+    // yetmiyor: geri yüklemenin gerçekten önceki kombinasyonla denendiğini
+    // (sadece .reverted döndürüp hiçbir şey kaydetmeyen sahte bir uygulamayı
+    // yakalamak için) çağrı geçmişini de kaydediyoruz.
+    var attempts: [KeyCombo] = []
     let outcome = reconcileHotKeyChange(from: comboA, to: comboB) { combo in
-        combo == comboB ? .failure(.alreadyTaken) : .success(())
+        attempts.append(combo)
+        return combo == comboB ? .failure(.alreadyTaken) : .success(())
     }
     #expect(outcome == .reverted(to: comboA, failureReason: .alreadyTaken))
+    #expect(attempts == [comboB, comboA])
 }
 
 @Test func failedNewComboAndFailedRestoreReportsRevertFailed() {

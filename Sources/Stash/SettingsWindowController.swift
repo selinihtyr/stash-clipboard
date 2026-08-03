@@ -5,11 +5,14 @@ import SwiftUI
 
 @MainActor
 final class SettingsWindowController: NSWindowController {
-    // `Settings` çıplak yazılınca SwiftUI.Settings (bir Scene tipi) ile
-    // çakışıyor; StashCore.Settings modül önekiyle belirtiliyor.
-    convenience init(settings: StashCore.Settings, store: ClipStore,
+    // `settingsStore` AppDelegate'ten geliyor ve onunla paylaşılıyor (kopya
+    // değil, aynı referans) — pencere kapatılmadan yaşadığı için
+    // (`isReleasedWhenClosed = false`), AppDelegate'in sonradan yaptığı bir
+    // değişiklik (ör. reddedilen bir kısayolu geri almak) bir sonraki
+    // `present()`'ta otomatik görünür (fix round 2).
+    convenience init(settingsStore: SettingsStore, store: ClipStore,
                      onChange: @escaping (StashCore.Settings) -> Void) {
-        let view = SettingsView(settings: settings, store: store, onChange: onChange)
+        let view = SettingsView(settingsStore: settingsStore, store: store, onChange: onChange)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 620),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "Stash Ayarları"

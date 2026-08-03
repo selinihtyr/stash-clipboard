@@ -18,7 +18,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // SwiftUI.Settings'in `load(from:)` üyesi olmaması sayesinde doğru
     // çözülüyordu — StashCore.Settings modül önekiyle bunu derleyiciye
     // bırakmıyoruz (fix round 1, bulgu 4).
-    private var settings = StashCore.Settings.load()
+    //
+    // `settings` artık `SettingsStore` içinde: ayarlar penceresiyle paylaşılan
+    // tek doğruluk kaynağı bu, aksi halde pencere reddedilen bir kısayolun
+    // geri alındığını hiç görmezdi (fix round 2, bkz. SettingsStore.swift).
+    private let settingsStore = SettingsStore(.load())
     private var store: ClipStore?
     private var capture: ClipCapture?
     private var settingsController: SettingsWindowController?
@@ -38,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.store = store
             let engine = PasteEngine(pasteboard: SystemPasteboardWriter(),
                                      keystrokes: SystemKeystrokeSender())
-            let model = StripModel(store: store, engine: engine, settings: settings)
+            let model = StripModel(store: store, engine: engine, settings: settingsStore.settings)
             self.model = model
 
             // blockedBundleIDs burada ClipCapture'a ulaşmazsa uygulamanın
@@ -49,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // yoksa çalışan yakalama kullanıcının az önce engellediği
             // uygulamadan kopyalamayı sürdürür (bkz. Task 13 için taşınan bulgu).
             let capture = ClipCapture(pasteboard: SystemPasteboard(),
-                                      policy: CapturePolicy(blockedBundleIDs: settings.blockedBundleIDs))
+                                      policy: CapturePolicy(blockedBundleIDs: settingsStore.settings.blockedBundleIDs))
             self.capture = capture
             let coordinator = CaptureCoordinator(store: store, capture: capture)
             coordinator.onCapture = { [weak self] in try? self?.model?.reload() }
@@ -69,8 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // şey yok; başarısız olursa tek yapılabilecek kullanıcıyı bilgilendirmek.
         // Ayarlar penceresinden gelen değişiklikler ayrı bir yoldan
         // (reconcileHotKeyChange) geçer ve geri yükleme dener — bkz. openSettings.
-        if case .failure(let error) = attemptRegister(settings.combo) {
-            presentHotKeyAlert(for: error, combo: settings.combo)
+        if case .failure(let error) = attemptRegister(settingsStore.settings.combo) {
+            presentHotKeyAlert(for: error, combo: settingsStore.settings.combo)
         }
     }
 
@@ -135,7 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func openSettings() {
         guard let store = self.store else { return }
         let controller = settingsController ?? SettingsWindowController(
-            settings: settings, store: store) { [weak self] updated in
+            settingsStore: settingsStore, store: store) { [weak self] updated in
                 guard let self else { return }
 
                 // reconcileHotKeyChange kombinasyon değişmediyse register'ı hiç
@@ -145,7 +149,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // olmazsa kullanıcıyı kısayolsuz bırakmamak için eskiye döner —
                 // ve başarısız kombinasyon diske hiç yazılmaz.
                 let outcome = reconcileHotKeyChange(
-                    from: self.settings.combo, to: updated.combo, register: self.attemptRegister)
+                    from: self.settingsStore.settings.combo, to: updated.combo,
+                    register: self.attemptRegister)
                 var finalSettings = updated
                 switch outcome {
                 case .applied(let combo):
@@ -168,7 +173,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     alert.runModal()
                 }
 
-                self.settings = finalSettings
+                // settingsStore.settings'i (bir struct kopyası değil, ayarlar
+                // penceresiyle paylaşılan gözlemlenebilir nesneyi) güncelliyoruz:
+                // pencere hâlâ açıksa ya da daha sonra tekrar açılırsa, geri
+                // alınan kombinasyonu (varsa) otomatik gösterir — fix round 2'nin
+                // tek bulgusu buydu.
+                self.settingsStore.settings = finalSettings
                 // Başarısız bir kombinasyonu diske yazmıyoruz: finalSettings.combo
                 // her zaman gerçekten kaydolmuş bir değer (yeni ya da eski) —
                 // aksi halde sonraki açılış aynı hatayı sessizce tekrar ederdi.

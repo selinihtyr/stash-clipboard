@@ -45,12 +45,23 @@ final class ShortcutRecorder: ObservableObject {
 }
 
 struct SettingsView: View {
-    // `Settings` çıplak yazılınca SwiftUI.Settings (bir Scene tipi) ile
-    // çakışıyor; StashCore.Settings modül önekiyle belirtiliyor.
-    @State var settings: StashCore.Settings
+    // `settingsStore` AppDelegate ile paylaşılan tek doğruluk kaynağı: bir
+    // struct anlık görüntüsü (@State) olsaydı AppDelegate'in reddedilen bir
+    // kısayolu geri alması hiç görüntüye yansımazdı (fix round 2). `settings`
+    // aşağıdaki hesaplanan özellik, bu dosyanın geri kalanının
+    // `settingsStore.settings` yerine hâlâ düz `settings` yazabilmesini
+    // sağlıyor.
+    @ObservedObject var settingsStore: SettingsStore
     let store: ClipStore
     let onChange: (StashCore.Settings) -> Void
     @StateObject private var recorder = ShortcutRecorder()
+
+    // `Settings` çıplak yazılınca SwiftUI.Settings (bir Scene tipi) ile
+    // çakışıyor; StashCore.Settings modül önekiyle belirtiliyor.
+    private var settings: StashCore.Settings {
+        get { settingsStore.settings }
+        nonmutating set { settingsStore.settings = newValue }
+    }
     @State private var diskText = "hesaplanıyor…"
     @State private var shelves: [Shelf] = []
     @State private var newShelfName = ""
