@@ -4,6 +4,10 @@ import Foundation
 public enum PasteOutcome: Equatable {
     case pastedIntoFrontmostApp
     case copiedOnlyNoAccessibilityPermission
+    /// Permission was present but the synthetic ⌘V itself could not be
+    /// posted (event construction failed). The content is safely on the
+    /// pasteboard; the user still needs to press ⌘V themselves.
+    case copiedOnlyKeystrokeFailed
 }
 
 public final class PasteEngine {
@@ -28,7 +32,6 @@ public final class PasteEngine {
 
     private func deliver() -> PasteOutcome {
         guard keystrokes.isTrusted else { return .copiedOnlyNoAccessibilityPermission }
-        keystrokes.sendCommandV()
-        return .pastedIntoFrontmostApp
+        return keystrokes.sendCommandV() ? .pastedIntoFrontmostApp : .copiedOnlyKeystrokeFailed
     }
 }

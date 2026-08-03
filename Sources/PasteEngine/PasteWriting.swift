@@ -9,7 +9,12 @@ public protocol PasteWriting: AnyObject {
 
 public protocol KeystrokeSending: AnyObject {
     var isTrusted: Bool { get }
-    func sendCommandV()
+
+    /// `true` once both key-down and key-up were posted; `false` if the
+    /// events could not even be constructed. A silent failure here would
+    /// leave the caller believing a paste happened when nothing did.
+    @discardableResult
+    func sendCommandV() -> Bool
 }
 
 public final class SystemPasteboardWriter: PasteWriting {
@@ -38,15 +43,17 @@ public final class SystemKeystrokeSender: KeystrokeSending {
     /// sonradan geri alabilir ve uygulama bunu başka türlü öğrenemez.
     public var isTrusted: Bool { AXIsProcessTrusted() }
 
-    public func sendCommandV() {
+    @discardableResult
+    public func sendCommandV() -> Bool {
         let source = CGEventSource(stateID: .combinedSessionState)
         let vKey: CGKeyCode = 9 // kVK_ANSI_V
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false)
-        else { return }
+        else { return false }
         down.flags = .maskCommand
         up.flags = .maskCommand
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
+        return true
     }
 }

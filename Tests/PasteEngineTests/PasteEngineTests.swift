@@ -14,7 +14,11 @@ final class FakePasteboardWriter: PasteWriting {
 final class FakeKeystrokes: KeystrokeSending {
     var isTrusted = true
     var sentCount = 0
-    func sendCommandV() { sentCount += 1 }
+    var succeeds = true
+    func sendCommandV() -> Bool {
+        sentCount += 1
+        return succeeds
+    }
 }
 
 @Test func pastingWritesToThePasteboardThenSendsCommandV() {
@@ -50,6 +54,17 @@ final class FakeKeystrokes: KeystrokeSending {
     _ = PasteEngine(pasteboard: pb, keystrokes: FakeKeystrokes())
         .paste(text: "kalın metin", filters: [.plainText])
     #expect(pb.lastPlainOnly == true)
+}
+
+@Test func keystrokeFailureLeavesTheCopyIntactAndSaysSo() {
+    // İzin var ama sentetik ⌘V gönderilemedi: içerik panoda kalmalı ve
+    // sonuç bunu ayırt etmeli, aksi halde kullanıcı hiçbir şey olmadığını
+    // sanır.
+    let pb = FakePasteboardWriter(); let keys = FakeKeystrokes()
+    keys.succeeds = false
+    let outcome = PasteEngine(pasteboard: pb, keystrokes: keys).paste(text: "merhaba", filters: [])
+    #expect(pb.lastText == "merhaba")
+    #expect(outcome == .copiedOnlyKeystrokeFailed)
 }
 
 @Test func imagesGoThroughTheSamePermissionLogic() {
