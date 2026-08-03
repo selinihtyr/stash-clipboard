@@ -74,3 +74,34 @@ private func imageClip(_ store: ClipStore, bytes: Int, at seconds: TimeInterval,
     _ = try imageClip(store, bytes: 500, at: 1)
     #expect(try store.pruneImages(highWater: 10_000, lowWater: 5_000) == 0)
 }
+
+@Test func upsertInsertRoundTripsAnApostropheInSourceNameExactly() throws {
+    // NSRunningApplication.localizedName besler bunu (Task 8); "Bob's Editor"
+    // gibi bir isim el yapımı SQL kaçışında sözdizimini kırıyordu.
+    let store = try makeStore()
+    let clip = Clip(id: UUID(), createdAt: Date(timeIntervalSince1970: 100), kind: .text,
+                    text: "merhaba", imagePath: nil, sourceBundleID: "com.bob's.app",
+                    sourceName: "Bob's Editor", pinned: false, shelfID: nil,
+                    contentHash: "hash-1", byteSize: 4)
+    try store.upsert(clip)
+    let all = try store.recent(limit: 10)
+    #expect(all.count == 1)
+    #expect(all[0].sourceName == "Bob's Editor")
+    #expect(all[0].sourceBundleID == "com.bob's.app")
+}
+
+@Test func upsertUpdateRoundTripsAnApostropheInSourceNameExactly() throws {
+    let store = try makeStore()
+    let first = Clip(id: UUID(), createdAt: Date(timeIntervalSince1970: 100), kind: .text,
+                     text: "aynı", imagePath: nil, sourceBundleID: nil, sourceName: nil,
+                     pinned: false, shelfID: nil, contentHash: "hash-2", byteSize: 4)
+    try store.upsert(first)
+    try store.upsert(Clip(id: UUID(), createdAt: Date(timeIntervalSince1970: 500), kind: .text,
+                          text: "aynı", imagePath: nil, sourceBundleID: "com.bob's.app",
+                          sourceName: "Bob's Editor", pinned: false, shelfID: nil,
+                          contentHash: "hash-2", byteSize: 4))
+    let all = try store.recent(limit: 10)
+    #expect(all.count == 1)
+    #expect(all[0].createdAt == Date(timeIntervalSince1970: 500))
+    #expect(all[0].sourceName == "Bob's Editor")
+}

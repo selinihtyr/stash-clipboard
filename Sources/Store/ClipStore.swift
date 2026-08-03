@@ -156,13 +156,25 @@ public final class ClipStore {
     /// tarihini günceller, böylece kart listenin başına döner ve geçmiş
     /// aynı şeyin kopyalarıyla dolmaz.
     public func upsert(_ clip: Clip) throws {
+        // El yapımı tırnak kaçışı "Bob's Editor" gibi isimlerde sözdizimini
+        // kırıyordu (NSRunningApplication.localizedName bunu besliyor); bound
+        // parametreler bu hata sınıfını tamamen ortadan kaldırır.
         let sql = """
-            UPDATE clips SET createdAt = \(clip.createdAt.timeIntervalSince1970),
-                             sourceBundleID = \(clip.sourceBundleID.map { "'\($0)'" } ?? "NULL"),
-                             sourceName = \(clip.sourceName.map { "'\($0)'" } ?? "NULL")
-            WHERE contentHash = '\(clip.contentHash.replacingOccurrences(of: "'", with: "''"))';
+            UPDATE clips SET createdAt = ?, sourceBundleID = ?, sourceName = ?
+            WHERE contentHash = ?;
             """
-        try exec(sql)
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw StoreError.queryFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_double(stmt, 1, clip.createdAt.timeIntervalSince1970)
+        bindText(stmt, 2, clip.sourceBundleID)
+        bindText(stmt, 3, clip.sourceName)
+        bindText(stmt, 4, clip.contentHash)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw StoreError.queryFailed(String(cString: sqlite3_errmsg(db)))
+        }
         if sqlite3_changes(db) == 0 { try insert(clip) }
     }
 
