@@ -8,5 +8,7 @@ let package = Package(
     targets: [
         .target(name: "Filters"),
         .testTarget(name: "FiltersTests", dependencies: ["Filters"]),
+        .target(name: "Store", linkerSettings: [.linkedLibrary("sqlite3")]),
+        .testTarget(name: "StoreTests", dependencies: ["Store"]),
     ]
 )
