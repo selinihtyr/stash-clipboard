@@ -1,9 +1,19 @@
+import PasteboardKit
 import Store
 import SwiftUI
 
 struct ClipCardView: View {
     let clip: Clip
     let isSelected: Bool
+
+    // Bilerek klibin kimliğine (Store.Clip.id, ForEach'te .id(clip.id) ile
+    // eşleşir) bağlı, panel-genelinde değil: LazyHStack kaydırırken kartları
+    // geri kullanabilir ama SwiftUI @State'i identity'e göre taşır, pozisyona
+    // göre değil — yanlış kartın açığa çıkması bu yüzden olmuyor. Panel her
+    // kapanışta gerçek pencere/host view'ı da atılıp yeniden kuruluyor
+    // (bkz. AppDelegate.toggleStrip), o yüzden yeniden açılış zaten maskeli
+    // başlıyor; burada ekstra bir "sıfırla" mantığı gerekmiyor.
+    @State private var revealed = false
 
     private var typeLabel: String {
         switch clip.kind {
@@ -14,6 +24,17 @@ struct ClipCardView: View {
         }
     }
 
+    private var isSensitive: Bool {
+        guard let text = clip.text else { return false }
+        return SensitivePatterns.isSensitive(text)
+    }
+
+    private var displayText: String {
+        guard let text = clip.text else { return "" }
+        guard isSensitive, !revealed else { return text }
+        return SensitivePatterns.mask(text)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
@@ -22,6 +43,10 @@ struct ClipCardView: View {
                     .kerning(0.6)
                     .foregroundStyle(Theme.label)
                 Spacer()
+                if isSensitive, !revealed {
+                    Text("çift tıkla, göster")
+                        .font(.system(size: 9)).foregroundStyle(Theme.label.opacity(0.7))
+                }
                 if clip.pinned {
                     Image(systemName: "pin.fill").font(.system(size: 9))
                         .foregroundStyle(Theme.accent)
@@ -47,6 +72,10 @@ struct ClipCardView: View {
                 .stroke(isSelected ? Theme.cardStrokeSelected : Theme.cardStroke, lineWidth: 1))
         .shadow(color: .black.opacity(isSelected ? 0.4 : 0), radius: 10, y: 6)
         .animation(.easeOut(duration: 0.12), value: isSelected)
+        // count: 2 kasıtlı: tek tıklama zaten StripView'de seçim yapıyor
+        // (ForEach içindeki .onTapGesture { model.select(...) }); çift tık
+        // olmasaydı her seçim aynı zamanda açığa çıkarırdı.
+        .onTapGesture(count: 2) { revealed = true }
     }
 
     @ViewBuilder private var content: some View {
@@ -73,7 +102,7 @@ struct ClipCardView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         } else {
-            Text(clip.text ?? "")
+            Text(displayText)
                 .font(.system(size: 12.5))
                 .foregroundStyle(Theme.body)
                 .lineLimit(6)
