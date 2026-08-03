@@ -12,5 +12,7 @@ let package = Package(
         .testTarget(name: "StoreTests", dependencies: ["Store"]),
         .target(name: "PasteboardKit"),
         .testTarget(name: "PasteboardKitTests", dependencies: ["PasteboardKit"]),
+        .target(name: "HotKey"),
+        .testTarget(name: "HotKeyTests", dependencies: ["HotKey"]),
     ]
 )
