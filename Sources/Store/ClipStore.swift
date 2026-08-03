@@ -50,6 +50,16 @@ public final class ClipStore {
             CREATE INDEX IF NOT EXISTS clips_createdAt ON clips(createdAt DESC);
             CREATE UNIQUE INDEX IF NOT EXISTS clips_hash ON clips(contentHash);
             """)
+        // IF NOT EXISTS mevcut veritabanlarını değiştirmez ama yeni bir tablo
+        // eklemek güvenli: eski dosyalar shelves olmadan açılabilir, ilk
+        // createShelf çağrısında tablo zaten hazır olur.
+        try exec("""
+            CREATE TABLE IF NOT EXISTS shelves (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              createdAt REAL NOT NULL
+            );
+            """)
     }
 
     deinit { sqlite3_close(db) }
@@ -171,6 +181,67 @@ public final class ClipStore {
 
     public func deleteAll() throws {
         try exec("DELETE FROM clips WHERE pinned = 0;")
+    }
+
+    /// Raf adı kullanıcı tarafından yazılıyor; `upsert`in üstündeki yorumun
+    /// anlattığı hatayı burada da tekrarlamamak için tırnak kaçışlı
+    /// interpolasyon yerine bağlı parametre kullanılıyor.
+    public func createShelf(name: String) throws -> Shelf {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw StoreError.queryFailed("raf adı boş olamaz") }
+        let shelf = Shelf(id: UUID(), name: trimmed)
+        let sql = "INSERT INTO shelves (id, name, createdAt) VALUES (?, ?, ?);"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw StoreError.queryFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bindText(stmt, 1, shelf.id.uuidString)
+        bindText(stmt, 2, trimmed)
+        sqlite3_bind_double(stmt, 3, Date().timeIntervalSince1970)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw StoreError.queryFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        return shelf
+    }
+
+    public func shelves() throws -> [Shelf] {
+        let sql = "SELECT id, name FROM shelves ORDER BY createdAt ASC;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw StoreError.queryFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        var out: [Shelf] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let id = column(stmt, 0).flatMap(UUID.init(uuidString:)),
+                  let name = column(stmt, 1) else { continue }
+            out.append(Shelf(id: id, name: name))
+        }
+        return out
+    }
+
+    public func renameShelf(_ id: UUID, to name: String) throws {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw StoreError.queryFailed("raf adı boş olamaz") }
+        let sql = "UPDATE shelves SET name = ? WHERE id = ?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw StoreError.queryFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bindText(stmt, 1, trimmed)
+        bindText(stmt, 2, id.uuidString)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw StoreError.queryFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    /// Rafı siler ama kartlarını silmez: kullanıcı klasörü kaldırıyor,
+    /// içindekini çöpe atmıyor — kartlar sadece rafsız kalıp Tümü'ne düşer.
+    public func deleteShelf(_ id: UUID) throws {
+        try exec("UPDATE clips SET shelfID = NULL WHERE shelfID = '\(id.uuidString)';")
+        try exec("DELETE FROM shelves WHERE id = '\(id.uuidString)';")
     }
 
     /// Aynı içerik tekrar kopyalandığında yeni satır açmaz; mevcut satırın
