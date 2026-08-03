@@ -99,6 +99,26 @@ private func makeModel(_ texts: [String]) throws -> (StripModel, ClipStore, Reco
     #expect(model.visible.map(\.text) == ["bir"])
 }
 
+@MainActor @Test func shelfTabShowsOnlyItsOwnCards() throws {
+    let (model, store, _) = try makeModel(["bir", "iki"])
+    let shelf = try model.createShelf(name: "İş")
+    try store.setShelf(shelf.id, id: model.visible[1].id)
+    model.tab = .shelf(shelf.id)
+    try model.reload()
+    #expect(model.visible.map(\.text) == ["bir"])
+}
+
+@MainActor @Test func reloadPicksUpShelvesCreatedThroughTheStore() throws {
+    // reload() her çağrıldığında raf listesini de tazeler; sekme çubuğu
+    // model.shelves'i doğrudan gözlemlediği için bu, yeni bir rafın hemen
+    // görünmesini sağlıyor.
+    let (model, store, _) = try makeModel(["bir"])
+    #expect(model.shelves.isEmpty)
+    _ = try store.createShelf(name: "İş")
+    try model.reload()
+    #expect(model.shelves.map(\.name) == ["İş"])
+}
+
 @MainActor @Test func defaultBlocklistCoversThePasswordManagers() {
     #expect(Settings.defaults.blockedBundleIDs.contains("com.1password.1password"))
     #expect(Settings.defaults.blockedBundleIDs.contains("com.apple.keychainaccess"))

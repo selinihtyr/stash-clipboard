@@ -47,6 +47,18 @@ struct StripView: View {
         HStack(spacing: 12) {
             Text("Stash").font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white).kerning(0.5)
+            ForEach(tabs, id: \.self) { entry in
+                Text(entry.title)
+                    .font(.system(size: 12))
+                    .padding(.horizontal, 13).padding(.vertical, 4)
+                    .background(Capsule().fill(model.tab == entry.tab
+                                               ? Theme.accent : Color.white.opacity(0.1)))
+                    .foregroundStyle(model.tab == entry.tab ? .white : Theme.body)
+                    .onTapGesture {
+                        model.tab = entry.tab
+                        try? model.reload()
+                    }
+            }
             if !model.query.isEmpty {
                 Text(model.query)
                     .font(.system(size: 12, design: .monospaced))
@@ -62,5 +74,16 @@ struct StripView: View {
         }
         .padding(.horizontal, 22)
         .padding(.top, 17)
+    }
+
+    struct TabEntry: Hashable { let title: String; let tab: StripTab }
+
+    private var tabs: [TabEntry] {
+        // İlk üçü sabit ve silinemez: raf değiller, kayıt üzerindeki alanlara
+        // bakan süzgeçler.
+        [TabEntry(title: "Tümü", tab: .all),
+         TabEntry(title: "Sabitlenen", tab: .pinned),
+         TabEntry(title: "Görseller", tab: .images)]
+        + model.shelves.map { TabEntry(title: $0.name, tab: .shelf($0.id)) }
     }
 }

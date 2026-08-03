@@ -126,6 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .togglePin: try? model.togglePinSelected()
             case .delete: try? model.deleteSelected()
             case .nextTab: self.advanceTab()
+            case .moveToShelf: self.showShelfMenu()
             case .dismiss:
                 self.panel?.dismiss()
             case .type(let char):
@@ -184,16 +185,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Kullanıcı şeritteyken sekmeler arasında dolaşır; kullanıcı rafları
-    /// Task 12'de gelecek, o yüzden döngü şimdilik yalnızca bu üçünü kapsıyor.
+    /// Kullanıcı şeritteyken sekmeler arasında dolaşır: önce sabit üçlü
+    /// (Tümü/Sabitlenen/Görseller), ardından kullanıcının rafları — sırası
+    /// StripView'daki sekme çubuğuyla aynı olmalı, yoksa ⇥ görünenden
+    /// başka bir sekmeye zıplar.
     private func advanceTab() {
         guard let model else { return }
-        model.tab = switch model.tab {
-        case .all: .pinned
-        case .pinned: .images
-        default: .all
-        }
+        let all: [StripTab] = [.all, .pinned, .images] + model.shelves.map { .shelf($0.id) }
+        let index = all.firstIndex(of: model.tab) ?? 0
+        model.tab = all[(index + 1) % all.count]
         try? model.reload()
+    }
+
+    /// ⌃S: seçili kartı bir rafa taşımak için raf listesini menü olarak
+    /// gösterir. "Yeni raf oluştur…" her zaman menüde; henüz hiç raf yoksa
+    /// menü boş açılıp kapanmaz — kullanıcı rafların nereden geldiğini
+    /// buradan öğrenir.
+    private func showShelfMenu() {
+        guard let model, model.visible.indices.contains(model.selectedIndex) else { return }
+        let menu = NSMenu()
+        for shelf in model.shelves {
+            let item = menu.addItem(withTitle: shelf.name,
+                                    action: #selector(moveSelectedToShelf(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = shelf.id
+        }
+        if !model.shelves.isEmpty { menu.addItem(.separator()) }
+        let newItem = menu.addItem(withTitle: "Yeni raf oluştur…",
+                                   action: #selector(createShelfAndMoveSelected), keyEquivalent: "")
+        newItem.target = self
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    @objc private func moveSelectedToShelf(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        try? model?.moveSelectedToShelf(id)
+    }
+
+    @objc private func createShelfAndMoveSelected() {
+        guard let model else { return }
+        let alert = NSAlert()
+        alert.messageText = "Yeni raf"
+        alert.informativeText = "Rafa bir ad ver."
+        alert.addButton(withTitle: "Oluştur")
+        alert.addButton(withTitle: "Vazgeç")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            let shelf = try model.createShelf(name: field.stringValue)
+            try model.moveSelectedToShelf(shelf.id)
+        } catch {
+            // Boş ad createShelf'i StoreError ile düşürür; sessizce hiçbir
+            // şey olmamış gibi davranmak kullanıcıyı neyin ters gittiği
+            // konusunda karanlıkta bırakır.
+            let errorAlert = NSAlert()
+            errorAlert.messageText = "Raf oluşturulamadı"
+            errorAlert.informativeText = "\(error)"
+            errorAlert.runModal()
+        }
     }
 
     /// Şerit farenin bulunduğu ekranda açılır; iki ekranlı kurulumda "yanlış

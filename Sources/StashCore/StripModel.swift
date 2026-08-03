@@ -4,7 +4,7 @@ import Foundation
 import PasteEngine
 import Store
 
-public enum StripTab: Equatable, Sendable {
+public enum StripTab: Hashable, Sendable {
     case all, pinned, images
     case shelf(UUID)
 }
@@ -15,6 +15,10 @@ public final class StripModel: ObservableObject {
     @Published public var tab: StripTab = .all
     @Published public private(set) var visible: [Clip] = []
     @Published public private(set) var selectedIndex: Int = 0
+    /// Kullanıcının oluşturduğu raflar; sekme çubuğu ve ⌃S menüsü bundan
+    /// besleniyor. Tümü/Sabitlenen/Görseller burada YOK — onlar raf değil,
+    /// mevcut alanlar üzerindeki süzgeçler (bkz. StripTab).
+    @Published public private(set) var shelves: [Shelf] = []
     public var settings: Settings
 
     private let store: ClipStore
@@ -41,6 +45,18 @@ public final class StripModel: ObservableObject {
         }
         // Liste değiştiğinde eski indekste kalmak yanlış kartı yapıştırır.
         selectedIndex = 0
+        try reloadShelves()
+    }
+
+    public func reloadShelves() throws { shelves = try store.shelves() }
+
+    /// Şerit penceresi doğrudan ClipStore'a erişmiyor; ⌃S menüsü "önce raf
+    /// yoksa oluştur" akışını burada tetikler ki store bağımlılığı model
+    /// katmanında kalsın.
+    public func createShelf(name: String) throws -> Shelf {
+        let shelf = try store.createShelf(name: name)
+        try reloadShelves()
+        return shelf
     }
 
     public func moveSelection(by delta: Int) {

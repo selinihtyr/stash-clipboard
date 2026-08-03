@@ -21,6 +21,10 @@ import AppKit
     #expect(stripCommand(keyCode: 35, characters: "p", modifiers: [.control]) == .togglePin)
 }
 
+@Test func controlSMovesToAShelf() {
+    #expect(stripCommand(keyCode: 1, characters: "s", modifiers: [.control]) == .moveToShelf)
+}
+
 @Test func plainCharactersBecomeSearchInput() {
     #expect(stripCommand(keyCode: 0, characters: "a", modifiers: []) == .type("a"))
 }

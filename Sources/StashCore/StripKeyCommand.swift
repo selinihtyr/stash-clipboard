@@ -4,7 +4,7 @@ public enum StripKeyCommand: Equatable, Sendable {
     case moveLeft, moveRight
     case paste(filtered: Bool)
     case pasteIndex(Int)
-    case togglePin, delete, nextTab, dismiss
+    case togglePin, delete, nextTab, dismiss, moveToShelf
     case type(Character)
     case backspace
 }
@@ -31,6 +31,7 @@ public func stripCommand(keyCode: UInt16, characters: String?,
     default: break
     }
     if mods == [.control], characters?.lowercased() == "p" { return .togglePin }
+    if mods == [.control], characters?.lowercased() == "s" { return .moveToShelf }
     if mods == [.command], let digit = characters.flatMap({ Int($0) }), (1...9).contains(digit) {
         return .pasteIndex(digit - 1)
     }
