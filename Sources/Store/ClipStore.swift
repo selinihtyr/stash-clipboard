@@ -116,6 +116,42 @@ public final class ClipStore {
         return out
     }
 
+    /// LIKE joker karakterlerini kaçırır. Bunu yapmazsak kullanıcının yazdığı
+    /// % veya _ bütün geçmişi eşleştirir ve arama bozuk görünür.
+    public func search(_ term: String, limit: Int) throws -> [Clip] {
+        let escaped = term
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_")
+            .replacingOccurrences(of: "'", with: "''")
+        return try query("""
+            SELECT * FROM clips
+            WHERE text LIKE '%\(escaped)%' ESCAPE '\\'
+            ORDER BY createdAt DESC LIMIT \(limit)
+            """)
+    }
+
+    public func setPinned(_ pinned: Bool, id: UUID) throws {
+        try exec("UPDATE clips SET pinned = \(pinned ? 1 : 0) WHERE id = '\(id.uuidString)';")
+    }
+
+    public func setShelf(_ shelfID: UUID?, id: UUID) throws {
+        let value = shelfID.map { "'\($0.uuidString)'" } ?? "NULL"
+        try exec("UPDATE clips SET shelfID = \(value) WHERE id = '\(id.uuidString)';")
+    }
+
+    public func delete(id: UUID) throws {
+        try exec("DELETE FROM clips WHERE id = '\(id.uuidString)';")
+    }
+
+    public func deleteCreated(after date: Date) throws {
+        try exec("DELETE FROM clips WHERE createdAt > \(date.timeIntervalSince1970) AND pinned = 0;")
+    }
+
+    public func deleteAll() throws {
+        try exec("DELETE FROM clips WHERE pinned = 0;")
+    }
+
     private func bindText(_ stmt: OpaquePointer?, _ index: Int32, _ value: String?) {
         if let value { sqlite3_bind_text(stmt, index, value, -1, SQLITE_TRANSIENT) }
         else { sqlite3_bind_null(stmt, index) }
