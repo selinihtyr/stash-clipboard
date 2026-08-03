@@ -7,6 +7,11 @@ import AppKit
 /// - .fullScreenAuxiliary: tam ekran uygulamaların üstünde de görünür.
 final class StripPanel: NSPanel {
     var onDismiss: (() -> Void)?
+    /// Ham NSEvent burada saf stripCommand(...) eşlemesine çevrilip
+    /// yönlendiriliyor. true dönerse tuş yutulur (super'e gitmez); false
+    /// dönerse super.keyDown çalışır — böylece işlemediğimiz tuşlarda sistem
+    /// beep sesi yerine normal davranış (ya da sessizlik) olur.
+    var onKey: ((NSEvent) -> Bool)?
     private var monitor: Any?
 
     static let height: CGFloat = 300
@@ -28,6 +33,13 @@ final class StripPanel: NSPanel {
     }
 
     override var canBecomeKey: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        // Panel key olduğu için bütün tuşlar buraya düşer; işlemediğimizi
+        // super'e bırakıyoruz ki sistem sesleri boşuna çalmasın.
+        if onKey?(event) == true { return }
+        super.keyDown(with: event)
+    }
 
     func show(on screen: NSScreen) {
         let frame = NSRect(x: screen.frame.minX, y: screen.frame.minY,

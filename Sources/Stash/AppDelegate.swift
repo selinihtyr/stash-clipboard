@@ -102,8 +102,89 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let host = NSHostingView(rootView: StripView(model: model))
         let panel = self.panel ?? StripPanel(contentView: host)
         panel.contentView = host
+        panel.onKey = { [weak self] event in
+            guard let self, let model = self.model else { return false }
+            guard let command = stripCommand(keyCode: event.keyCode,
+                                             characters: event.charactersIgnoringModifiers,
+                                             modifiers: event.modifierFlags) else { return false }
+            switch command {
+            case .moveLeft: model.moveSelection(by: -1)
+            case .moveRight: model.moveSelection(by: 1)
+            case .paste(let filtered):
+                self.finishPaste(model.pasteSelected(applyingFilters: filtered))
+            case .pasteIndex(let index):
+                // Görünürden az kart varken ⌘N basılırsa hiçbir şey olmamalı;
+                // aksi halde eski seçim sessizce yapıştırılır — yanlış kartı
+                // panoya göndermek boş yapmaktan daha kötü.
+                guard model.visible.indices.contains(index) else { break }
+                model.select(index: index)
+                self.finishPaste(model.pasteSelected(applyingFilters: false))
+            case .togglePin: try? model.togglePinSelected()
+            case .delete: try? model.deleteSelected()
+            case .nextTab: self.advanceTab()
+            case .dismiss:
+                // Bir sonraki açılış eski süzgeçle değil temiz gelsin.
+                model.query = ""
+                self.panel?.dismiss()
+            case .type(let char):
+                model.query.append(char)
+                try? model.reload()
+            case .backspace:
+                if !model.query.isEmpty { model.query.removeLast(); try? model.reload() }
+            }
+            return true
+        }
         self.panel = panel
         panel.show(on: Self.screenWithMouse())
+    }
+
+    /// Yapıştırma isteği üç farklı sonuçla dönebilir; sessizce yutmak
+    /// kullanıcıyı kör bırakır — özellikle klavyeden gidiliyorsa görsel bir
+    /// ipucu yok, tek geri bildirim bu.
+    private func finishPaste(_ outcome: PasteOutcome?) {
+        panel?.dismiss()
+        model?.query = ""
+        switch outcome {
+        case nil, .pastedIntoFrontmostApp:
+            return
+        case .copiedOnlyNoAccessibilityPermission:
+            // Sessizce kopyalayıp bırakmıyoruz: kullanıcı ⌘V beklerken hiçbir şey
+            // olmadığını görürse uygulamayı bozuk sanır.
+            let alert = NSAlert()
+            alert.messageText = "Panoya kopyalandı"
+            alert.informativeText = """
+                Doğrudan yapıştırma için Stash'in Erişilebilirlik izni gerekiyor. \
+                Şimdilik ⌘V ile yapıştırabilirsin.
+                """
+            alert.addButton(withTitle: "İzin ver")
+            alert.addButton(withTitle: "Şimdi değil")
+            if alert.runModal() == .alertFirstButtonReturn {
+                NSWorkspace.shared.open(URL(string:
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+            }
+        case .copiedOnlyKeystrokeFailed:
+            // İzin zaten verilmiş; sorun izinde değil, tek seferlik tuş
+            // gönderiminde. Kullanıcıyı izin ayarına yönlendirmek yanlış
+            // teşhis olur — burada gösterilecek tek doğru şey içeriğin
+            // panoda olduğu ve ⌘V ile yapıştırılabileceği.
+            let alert = NSAlert()
+            alert.messageText = "Panoya kopyalandı"
+            alert.informativeText = "Otomatik yapıştırma bu sefer olmadı. İçerik panoda, ⌘V ile yapıştır."
+            alert.addButton(withTitle: "Tamam")
+            alert.runModal()
+        }
+    }
+
+    /// Kullanıcı şeritteyken sekmeler arasında dolaşır; kullanıcı rafları
+    /// Task 12'de gelecek, o yüzden döngü şimdilik yalnızca bu üçünü kapsıyor.
+    private func advanceTab() {
+        guard let model else { return }
+        model.tab = switch model.tab {
+        case .all: .pinned
+        case .pinned: .images
+        default: .all
+        }
+        try? model.reload()
     }
 
     /// Şerit farenin bulunduğu ekranda açılır; iki ekranlı kurulumda "yanlış
