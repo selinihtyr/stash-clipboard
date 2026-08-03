@@ -99,10 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let panel, panel.isVisible { panel.dismiss(); return }
         guard let model else { return }
         try? model.reload()
-        let host = NSHostingView(rootView: StripView(model: model,
-                                                      onDismiss: { [weak self] in
-            self?.panel?.dismiss()
-        }))
+        let host = NSHostingView(rootView: StripView(model: model))
         let panel = self.panel ?? StripPanel(contentView: host)
         panel.contentView = host
         self.panel = panel

@@ -48,6 +48,14 @@ public final class CaptureCoordinator {
                 let url = store.imagesDirectory.appendingPathComponent("\(id.uuidString).png")
                 try data.write(to: url)
                 imagePath = url.path
+                // Küçük resim türetilmiş bir dosya, orijinalin yerini tutmaz:
+                // üretimi başarısız olsa da (ör. çözülemeyen veri) yakalama
+                // hâlâ başarılı sayılır — kart o zaman orijinali kendisi
+                // çözer (bkz. ClipCardView), daha yavaş ama klip kaybolmaz.
+                if let thumbData = ThumbnailGenerator.makeJPEG(from: data) {
+                    let thumbURL = store.thumbsDirectory.appendingPathComponent("\(id.uuidString).jpg")
+                    try? thumbData.write(to: thumbURL)
+                }
             }
             try store.upsert(Clip(
                 id: id, createdAt: Date(),

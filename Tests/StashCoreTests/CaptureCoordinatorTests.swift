@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import AppKit
 import Store
 import PasteboardKit
 @testable import StashCore
@@ -53,4 +54,60 @@ private func makeCoordinator() throws -> (CaptureCoordinator, ClipStore, FakeCap
 
     let files = try FileManager.default.contentsOfDirectory(atPath: store.imagesDirectory.path)
     #expect(files.count == 1)
+}
+
+/// Sahte PNG başlıkları (bu dosyadaki `png` sabiti gibi) NSImage tarafından
+/// çözülemez — küçük resim üretimi "başarısız olmalı" testleri için doğru,
+/// ama "başarılı olmalı" testleri gerçek, çözülebilir bir görsel ister.
+private func makeRealPNG(width: Int = 900, height: Int = 600) -> Data {
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
+                                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    NSColor.systemPurple.setFill()
+    NSRect(x: 0, y: 0, width: width, height: height).fill()
+    NSGraphicsContext.restoreGraphicsState()
+    return rep.representation(using: .png, properties: [:])!
+}
+
+@MainActor @Test func capturingAnImageWritesBothTheOriginalAndAThumbnail() throws {
+    let (coordinator, store, pb) = try makeCoordinator()
+    pb.putImage(makeRealPNG())
+    coordinator.tick()
+
+    let clip = try #require(try store.recent(limit: 10).first)
+    #expect(FileManager.default.fileExists(atPath: try #require(clip.imagePath)))
+    let thumbPath = try #require(clip.thumbPath)
+    #expect(FileManager.default.fileExists(atPath: thumbPath))
+}
+
+@MainActor @Test func theThumbnailIsSmallerOnDiskThanTheOriginal() throws {
+    let (coordinator, store, pb) = try makeCoordinator()
+    pb.putImage(makeRealPNG())
+    coordinator.tick()
+
+    let clip = try #require(try store.recent(limit: 10).first)
+    let originalSize = try FileManager.default.attributesOfItem(
+        atPath: try #require(clip.imagePath))[.size] as? Int
+    let thumbSize = try FileManager.default.attributesOfItem(
+        atPath: try #require(clip.thumbPath))[.size] as? Int
+    #expect(try #require(thumbSize) < (try #require(originalSize)))
+}
+
+@MainActor @Test func aCaptureWhoseThumbnailCannotBeWrittenStillStoresTheClipAndItsOriginal() throws {
+    // Küçük resim türetilmiş bir dosya; bu klibin görsel verisi NSImage
+    // tarafından hiç çözülemiyor (sahte başlık), yani üretim baştan
+    // başarısız olacak — capture'ın buna rağmen tamamlandığını doğruluyoruz.
+    let (coordinator, store, pb) = try makeCoordinator()
+    let undecodable = Data([0x89, 0x50, 0x4E, 0x47, 0x01, 0x02, 0x03])
+    pb.putImage(undecodable)
+    coordinator.tick()
+
+    let clip = try #require(try store.recent(limit: 10).first)
+    let imagePath = try #require(clip.imagePath)
+    #expect(FileManager.default.fileExists(atPath: imagePath))
+    // Küçük resim yok — ama bu klibi kaybetmedi, sadece kartı orijinale
+    // düşürüyor (bkz. ClipCardView).
+    #expect(!FileManager.default.fileExists(atPath: try #require(clip.thumbPath)))
 }

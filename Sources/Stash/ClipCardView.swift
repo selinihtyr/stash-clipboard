@@ -51,7 +51,18 @@ struct ClipCardView: View {
 
     @ViewBuilder private var content: some View {
         if clip.kind == .image {
-            if let path = clip.imagePath, let image = NSImage(contentsOfFile: path) {
+            // Küçük resim varsa onu tercih et: LazyHStack görünüme yakın
+            // kartları kursa da her kart hâlâ NSImage(contentsOfFile:) ile
+            // senkron çözüyor — orijinal ekran görüntüsünü değil, küçük
+            // resmi çözmek bu maliyeti gerçekten düşürüyor. Küçük resim
+            // üretilememişse (üretim başarısız olmuş ya da bu klip küçük
+            // resimler eklenmeden önce yakalanmış) orijinale dönmek zorunlu:
+            // yoksa her eski klip bu düşer.
+            if let path = clip.thumbPath, let image = NSImage(contentsOfFile: path) {
+                Image(nsImage: image).resizable().scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+            } else if let path = clip.imagePath, let image = NSImage(contentsOfFile: path) {
                 Image(nsImage: image).resizable().scaledToFill()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: 7))

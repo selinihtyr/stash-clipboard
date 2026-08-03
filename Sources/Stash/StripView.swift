@@ -3,7 +3,6 @@ import SwiftUI
 
 struct StripView: View {
     @ObservedObject var model: StripModel
-    let onDismiss: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
