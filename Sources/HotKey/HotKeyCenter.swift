@@ -1,18 +1,27 @@
 import Carbon.HIToolbox
 import Foundation
 
-public enum HotKeyError: Error, Equatable { case alreadyTaken }
+public enum HotKeyError: Error, Equatable {
+    case alreadyTaken
+    /// `RegisterEventHotKey` başarısız olmadan `InstallEventHandler` başarısız olursa
+    /// çağıran taraf bunu `alreadyTaken`dan ayırt edebilmeli: aksi halde kısayol
+    /// sessizce ölü kalır — hiçbir hata görünmeden basıldığında hiçbir şey olmaz.
+    case handlerInstallFailed(OSStatus)
+}
 
 /// RegisterEventHotKey kullanıyoruz, CGEventTap değil: bu API Erişilebilirlik
 /// izni istemiyor, dolayısıyla uygulama izin verilmeden de açılabiliyor.
+///
+/// @MainActor: register/unregister çağrıları ve C geri çağırımının okuduğu `handler`
+/// aynı izolasyona bağlanmadan "sadece ana iş parçacığında çağrılır" bir sözleşmeden
+/// ibaret kalıyordu — hiçbir şey `register()`'ın arka planda çağrılmasını engellemiyordu.
+/// Tip artık bunu derleyicide zorluyor.
+@MainActor
 public final class HotKeyCenter {
     private var ref: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
-    private var handler: (@MainActor () -> Void)?
-    // Swift 6 sıkı eşzamanlılık denetimi statik mutable state'e itiraz ediyor;
-    // burada gerçek bir veri yarışı yok (kayıt ana iş parçacığında yapılıyor,
-    // sadece kimlikleri benzersiz kılmak için artan bir sayaç).
-    nonisolated(unsafe) private static var nextID: UInt32 = 1
+    private var handler: (() -> Void)?
+    private static var nextID: UInt32 = 1
 
     public init() {}
 
@@ -23,13 +32,26 @@ public final class HotKeyCenter {
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
                                       eventKind: UInt32(kEventHotKeyPressed))
         let context = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, context in
+        let installStatus = InstallEventHandler(GetApplicationEventTarget(), { _, _, context in
             guard let context else { return noErr }
-            let center = Unmanaged<HotKeyCenter>.fromOpaque(context).takeUnretainedValue()
-            let fire = center.handler
-            DispatchQueue.main.async { MainActor.assumeIsolated { fire?() } }
+            // Carbon bu trampoline'ı uygulamanın ana çalışma döngüsünden çağırıyor;
+            // bu yüzden MainActor.assumeIsolated burada geçerli bir varsayım. `center`
+            // kasıtlı olarak izolasyon içinde, opak işaretçiden yeniden kuruluyor —
+            // dışarıdan Sendable olmayan bir referans yakalamaktan kaçınmak için.
+            MainActor.assumeIsolated {
+                let center = Unmanaged<HotKeyCenter>.fromOpaque(context).takeUnretainedValue()
+                center.handler?()
+            }
             return noErr
         }, 1, &eventType, context, &handlerRef)
+
+        guard installStatus == noErr else {
+            // Kurulum başarısız oldu: handlerRef'i temizle, ama henüz hiçbir
+            // sistem kaynağı (hotkey kaydı) alınmadı, unregister() gerekmiyor.
+            handlerRef = nil
+            self.handler = nil
+            throw HotKeyError.handlerInstallFailed(installStatus)
+        }
 
         let id = EventHotKeyID(signature: OSType(0x53545348 /* "STSH" */), id: Self.nextID)
         Self.nextID += 1
@@ -49,5 +71,7 @@ public final class HotKeyCenter {
         handler = nil
     }
 
-    deinit { unregister() }
+    isolated deinit {
+        unregister()
+    }
 }

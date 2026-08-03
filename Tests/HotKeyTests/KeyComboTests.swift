@@ -20,7 +20,7 @@ import Testing
     #expect(try JSONDecoder().decode(KeyCombo.self, from: data) == KeyCombo.defaultCombo)
 }
 
-@Test func registeringTheSameComboTwiceReportsItIsTaken() throws {
+@Test @MainActor func registeringTheSameComboTwiceReportsItIsTaken() throws {
     // Kısayol kapılıysa sessizce ölü bir kısayol bırakmak yerine hata veriyoruz;
     // ayarlar bunu kırmızı uyarıya çevirecek.
     let first = HotKeyCenter()
@@ -30,4 +30,18 @@ import Testing
     #expect(throws: HotKeyError.alreadyTaken) {
         try second.register(.defaultCombo) {}
     }
+}
+
+@Test func handlerInstallFailureIsDistinguishableFromAlreadyTaken() {
+    // register()'ın iki başarısızlık yolu (InstallEventHandler ve
+    // RegisterEventHotKey) artık ayrı case'ler; çağıran taraf "kısayol kapılı"
+    // ile "kısayol hiç kurulamadı" durumlarını ayırt edebilmeli.
+    //
+    // Gerçek bir InstallEventHandler başarısızlığını bu test ortamından
+    // tetiklemenin Carbon'u sahtelemeden güvenilir bir yolu yok — register()'ın
+    // bu yolda gerçekten handlerInstallFailed fırlattığını doğrulayan bir test
+    // yazamadık. Burada doğrulanan, temsilin (enum case'lerinin) birbirinden
+    // ayırt edilebilir olduğu; register()'ın gerçek dünyada bu case'e düştüğü
+    // değil.
+    #expect(HotKeyError.handlerInstallFailed(-50) != HotKeyError.alreadyTaken)
 }
