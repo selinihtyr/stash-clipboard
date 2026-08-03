@@ -25,8 +25,12 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_PATH/Stash" "$APP/Contents/MacOS/Stash"
 cp "$ROOT/Sources/Stash/Info.plist" "$APP/Contents/Info.plist"
 
-# Ad-hoc imza. Erişilebilirlik izni imzaya bağlanır: imza her derlemede
-# değişirse macOS izni unutur, o yüzden ad-hoc imzayı sabit tutuyoruz.
+# Ad-hoc imza: geliştirici sertifikası olmadan uygulamayı çalıştırılabilir
+# kılan tek yol bu. Ama TCC izni imzanın CDHash'ine bağlanır ve kaynak
+# değişince hash de değişir — yani her kod değişikliğinden sonra
+# Erişilebilirlik izni yeniden onaylanmalı. Bunu ortadan kaldırmak istersen
+# gerçek çözüm sabit bir self-signed geliştirici sertifikasıdır (`--sign -`
+# yerine); bu script'in işi değil.
 codesign --force --sign - --timestamp=none "$APP"
 
 echo "Built $APP"
