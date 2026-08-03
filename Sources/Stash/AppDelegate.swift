@@ -13,7 +13,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKey = HotKeyCenter()
     private var coordinator: CaptureCoordinator?
     private var model: StripModel?
-    private var settings = Settings.load()
+    // `Settings` çıplak yazılınca bu dosya SwiftUI'yi de import ettiği için
+    // SwiftUI.Settings (bir Scene tipi) ile çakışıyor; bugüne kadar yalnızca
+    // SwiftUI.Settings'in `load(from:)` üyesi olmaması sayesinde doğru
+    // çözülüyordu — StashCore.Settings modül önekiyle bunu derleyiciye
+    // bırakmıyoruz (fix round 1, bulgu 4).
+    private var settings = StashCore.Settings.load()
     private var store: ClipStore?
     private var capture: ClipCapture?
     private var settingsController: SettingsWindowController?
@@ -60,39 +65,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        registerHotKey()
+        // İlk açılışta geri dönülecek "önceki çalışan kombinasyon" diye bir
+        // şey yok; başarısız olursa tek yapılabilecek kullanıcıyı bilgilendirmek.
+        // Ayarlar penceresinden gelen değişiklikler ayrı bir yoldan
+        // (reconcileHotKeyChange) geçer ve geri yükleme dener — bkz. openSettings.
+        if case .failure(let error) = attemptRegister(settings.combo) {
+            presentHotKeyAlert(for: error, combo: settings.combo)
+        }
     }
 
-    private func registerHotKey() {
+    /// Tek bir kombinasyonu kaydetmeyi dener. NSAlert göstermez — çağıran
+    /// taraf (launch ya da ayarlar değişikliği) sonucu farklı yorumluyor:
+    /// launch'ta geri dönülecek bir şey yok, ayarlarda ise
+    /// `reconcileHotKeyChange` başarısızlığı önceki kombinasyona dönmek için
+    /// kullanıyor. Alanı burada karıştırmamak `reconcileHotKeyChange`'in
+    /// Carbon'a ya da bir uyarı penceresine dokunmadan test edilebilmesini
+    /// sağlıyor (fix round 1, bulgu 1).
+    private func attemptRegister(_ combo: KeyCombo) -> Result<Void, HotKeyError> {
         do {
-            try hotKey.register(settings.combo) { [weak self] in self?.toggleStrip() }
-        } catch HotKeyError.alreadyTaken {
+            try hotKey.register(combo) { [weak self] in self?.toggleStrip() }
+            return .success(())
+        } catch let error as HotKeyError {
+            return .failure(error)
+        } catch {
+            // hotKey.register yalnızca HotKeyError fırlatır; bu dal pratikte
+            // hiç çalışmaz ama derleyici genel bir catch istiyor.
+            return .failure(.alreadyTaken)
+        }
+    }
+
+    private func presentHotKeyAlert(for error: HotKeyError, combo: KeyCombo) {
+        let alert = NSAlert()
+        alert.messageText = "Kısayol kaydedilemedi"
+        switch error {
+        case .alreadyTaken:
             // Gerçek çakışma: kullanıcı başka bir kısayol seçebilir.
-            let alert = NSAlert()
-            alert.messageText = "Kısayol kaydedilemedi"
             alert.informativeText = """
-                \(settings.combo.displayString) başka bir uygulama tarafından kullanılıyor. \
+                \(combo.displayString) başka bir uygulama tarafından kullanılıyor. \
                 Ayarlar'dan farklı bir kombinasyon seç.
                 """
-            alert.runModal()
-        } catch HotKeyError.handlerInstallFailed(let status) {
+        case .handlerInstallFailed(let status):
             // Çakışma değil, dahili bir kurulum hatası: kullanıcıyı başka bir
             // kombinasyon denemeye yönlendirmek yanlış teşhis olur — sebep
             // sistemde, kısayolda değil.
-            let alert = NSAlert()
-            alert.messageText = "Kısayol kaydedilemedi"
             alert.informativeText = """
                 Sistem olay işleyicisi kurulamadı (durum kodu \(status)). \
                 Bu bir kısayol çakışması değil, dahili bir hata. Uygulamayı yeniden \
                 başlatmayı deneyebilirsin.
                 """
-            alert.runModal()
-        } catch {
-            let alert = NSAlert()
-            alert.messageText = "Kısayol kaydedilemedi"
-            alert.informativeText = "\(error)"
-            alert.runModal()
         }
+        alert.runModal()
     }
 
     private func buildMenu() -> NSMenu {
@@ -115,20 +137,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = settingsController ?? SettingsWindowController(
             settings: settings, store: store) { [weak self] updated in
                 guard let self else { return }
-                self.settings = updated
-                updated.save()
+
+                // reconcileHotKeyChange kombinasyon değişmediyse register'ı hiç
+                // çağırmaz — filtre/kara liste/raf değişikliklerinde gereksiz bir
+                // unregister/register döngüsüne girmemek için (fix round 1,
+                // bulgu 1'in üçüncü parçası). Değiştiyse önce yeniyi dener,
+                // olmazsa kullanıcıyı kısayolsuz bırakmamak için eskiye döner —
+                // ve başarısız kombinasyon diske hiç yazılmaz.
+                let outcome = reconcileHotKeyChange(
+                    from: self.settings.combo, to: updated.combo, register: self.attemptRegister)
+                var finalSettings = updated
+                switch outcome {
+                case .applied(let combo):
+                    finalSettings.combo = combo
+                case .reverted(let combo, let reason):
+                    finalSettings.combo = combo
+                    self.presentHotKeyAlert(for: reason, combo: updated.combo)
+                case .revertFailed(let attempted, let previous, let reason):
+                    // Eskisi de kaydolamadı: kullanıcının şu an hiçbir çalışan
+                    // kısayolu yok. Bunu üstünü örtmeden, açıkça söylüyoruz.
+                    finalSettings.combo = previous
+                    self.presentHotKeyAlert(for: reason, combo: previous)
+                    let alert = NSAlert()
+                    alert.messageText = "Kısayol geri yüklenemedi"
+                    alert.informativeText = """
+                        Ne \(attempted.displayString) ne de önceki \(previous.displayString) \
+                        kaydedilebildi. Stash şu an hiçbir kısayolla açılamıyor; \
+                        Ayarlar'dan farklı bir kombinasyon dene.
+                        """
+                    alert.runModal()
+                }
+
+                self.settings = finalSettings
+                // Başarısız bir kombinasyonu diske yazmıyoruz: finalSettings.combo
+                // her zaman gerçekten kaydolmuş bir değer (yeni ya da eski) —
+                // aksi halde sonraki açılış aynı hatayı sessizce tekrar ederdi.
+                finalSettings.save()
+
                 // Kara liste değiştiyse çalışan yakalama bunu görmezse ayarlar
                 // penceresi yalan söylemiş olur — kullanıcı bir uygulamayı
                 // engelledi sanır, yakalama eski listeyle sürer (bkz. Task 8
                 // incelemesinden Task 13'e taşınan bulgu).
-                self.capture?.updatePolicy(CapturePolicy(blockedBundleIDs: updated.blockedBundleIDs))
-                // Kısayol değiştiyse yeniden kaydet: eski kombinasyon canlı
-                // kalırsa kullanıcı iki kısayolla açar ve sebebini anlamaz.
-                // register(_:handler:) her çağrıda önce unregister() çalıştırır,
-                // yani burada ikinci bir merkez değil, aynı `hotKey` yeniden
-                // kaydolur.
-                self.registerHotKey()
-                self.model?.settings = updated
+                self.capture?.updatePolicy(CapturePolicy(blockedBundleIDs: finalSettings.blockedBundleIDs))
+                self.model?.settings = finalSettings
             }
         settingsController = controller
         controller.present()

@@ -55,6 +55,13 @@ struct SettingsView: View {
     @State private var shelves: [Shelf] = []
     @State private var newShelfName = ""
     @State private var errorAlert: AlertMessage?
+    // body içinde AXIsProcessTrusted() doğrudan okunsaydı SwiftUI'nin yeniden
+    // çizilmesini tetikleyecek hiçbir şey olmazdı: kullanıcı "verilmedi"
+    // görüp Sistem Ayarları'na gidip izni verip geri döndüğünde pencere hâlâ
+    // "verilmedi" derdi — tam da uygulama çalışmaya başladığı anda bozukmuş
+    // gibi görünürdü (fix round 1, bulgu 3). @State + uygulama etkinleşince
+    // yeniden okumak bunu çözüyor.
+    @State private var accessibilityTrusted = AXIsProcessTrusted()
 
     struct AlertMessage: Identifiable { let id = UUID(); let title: String; let detail: String }
 
@@ -127,8 +134,8 @@ struct SettingsView: View {
             }
             Section("İzin") {
                 LabeledContent("Erişilebilirlik",
-                               value: AXIsProcessTrusted() ? "verildi" : "verilmedi")
-                if !AXIsProcessTrusted() {
+                               value: accessibilityTrusted ? "verildi" : "verilmedi")
+                if !accessibilityTrusted {
                     Button("Sistem Ayarları'nı aç") {
                         NSWorkspace.shared.open(URL(string:
                             "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
@@ -142,6 +149,12 @@ struct SettingsView: View {
         .frame(width: 460, height: 620)
         .onAppear(perform: refresh)
         .onDisappear { recorder.stop() }
+        // Kullanıcı Sistem Ayarları'ndan izin verip Stash'e geri döndüğünde
+        // uygulama yeniden etkinleşir; bu bildirim izin durumunu güncel
+        // tutmanın zamanlayıcı kurmadan yeterli olan tek tetikleyicisi.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            accessibilityTrusted = AXIsProcessTrusted()
+        }
         .alert(item: $errorAlert) { message in
             Alert(title: Text(message.title), message: Text(message.detail),
                  dismissButton: .default(Text("Tamam")))
@@ -152,6 +165,7 @@ struct SettingsView: View {
         refreshShelves()
         let bytes = (try? store.imagesByteSize()) ?? 0
         diskText = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+        accessibilityTrusted = AXIsProcessTrusted()
     }
 
     private func refreshShelves() {

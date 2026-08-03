@@ -17,6 +17,14 @@ public struct CapturePolicy: Sendable {
     }
 }
 
+/// @MainActor: `policy` artık `var` ve `updatePolicy(_:)` ile ayarlar
+/// penceresinden, `poll(frontmostBundleID:)` ise `CaptureCoordinator`'ın
+/// zamanlayıcısından okunuyor. İkisinin de "aynı iş parçacığında çalışır"
+/// sözleşmesine güvenip bırakmak HotKeyCenter'ın aynı sınıfta yaşadığı
+/// sorunu tekrarlardı: hiçbir şey `updatePolicy`'nin arka planda
+/// çağrılmasını engellemiyordu. Tip artık bunu derleyicide zorluyor —
+/// bkz. HotKeyCenter'daki aynı gerekçe.
+@MainActor
 public final class ClipCapture {
     /// Diğer uygulamaların "bunu kaydetme" demek için kullandığı iş birliği
     /// tipleri. nspasteboard.org'daki gayriresmî ama yaygın sözleşme.
