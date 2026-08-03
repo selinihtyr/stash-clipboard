@@ -4,7 +4,9 @@ import PackageDescription
 let package = Package(
     name: "Stash",
     platforms: [.macOS(.v14)],
-    products: [],
+    products: [
+        .executable(name: "Stash", targets: ["Stash"])
+    ],
     targets: [
         .target(name: "Filters"),
         .testTarget(name: "FiltersTests", dependencies: ["Filters"]),
@@ -20,5 +22,7 @@ let package = Package(
                 dependencies: ["Store", "PasteboardKit", "PasteEngine", "Filters", "HotKey"]),
         .testTarget(name: "StashCoreTests",
                     dependencies: ["StashCore", "Store", "PasteEngine", "Filters"]),
+        .executableTarget(name: "Stash", dependencies: ["StashCore", "HotKey"],
+                          exclude: ["Info.plist"]),
     ]
 )
