@@ -89,3 +89,22 @@ private func capture(_ pb: FakePasteboard, blocked: Set<String> = []) -> ClipCap
     let second = capture(pb).poll(frontmostBundleID: nil)
     #expect(first?.contentHash == second?.contentHash)
 }
+
+@Test func fileAndTextClipsWithTheSameStringHashDifferently() {
+    // Bir dosya yolu ("/Users/x/notes.txt") aynı zamanda geçerli bir metin
+    // kopyası olabilir. Kind'ı hash'e katmazsak Store.upsert bu ikisini
+    // aynı satırda birleştirir ve biri sessizce yanlış türde görünür.
+    let filePB = FakePasteboard()
+    filePB.files = ["/Users/x/notes.txt"]
+    filePB.types = ["public.file-url"]
+    filePB.changeCount += 1
+    let fileClip = capture(filePB).poll(frontmostBundleID: nil)
+
+    let textPB = FakePasteboard()
+    textPB.put(text: "/Users/x/notes.txt")
+    let textClip = capture(textPB).poll(frontmostBundleID: nil)
+
+    #expect(fileClip?.kind == .file)
+    #expect(textClip?.kind == .text)
+    #expect(fileClip?.contentHash != textClip?.contentHash)
+}

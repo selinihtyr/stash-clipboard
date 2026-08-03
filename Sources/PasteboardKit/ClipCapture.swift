@@ -44,17 +44,18 @@ public final class ClipCapture {
 
         if let data = pasteboard.imageData(), !data.isEmpty {
             return CapturedClip(kind: .image, text: nil, imageData: data,
-                                contentHash: Self.hash(data))
+                                contentHash: Self.hash(.image, data))
         }
         if let paths = pasteboard.fileURLStrings(), !paths.isEmpty {
             let joined = paths.joined(separator: "\n")
             return CapturedClip(kind: .file, text: joined, imageData: nil,
-                                contentHash: Self.hash(Data(joined.utf8)))
+                                contentHash: Self.hash(.file, Data(joined.utf8)))
         }
         guard let text = pasteboard.string(),
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        return CapturedClip(kind: Self.isLink(text) ? .link : .text, text: text,
-                            imageData: nil, contentHash: Self.hash(Data(text.utf8)))
+        let kind: CapturedKind = Self.isLink(text) ? .link : .text
+        return CapturedClip(kind: kind, text: text,
+                            imageData: nil, contentHash: Self.hash(kind, Data(text.utf8)))
     }
 
     static func isLink(_ text: String) -> Bool {
@@ -63,7 +64,12 @@ public final class ClipCapture {
         return url.scheme == "http" || url.scheme == "https"
     }
 
-    static func hash(_ data: Data) -> String {
-        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    /// Kind, hash'e dahil edilir: ham baytları aynı olan ama farklı türden içerik
+    /// (ör. bir dosya yolu string'i == bir metin kopyası) aynı hash'e düşüp
+    /// Store.upsert'te sessizce birleşmesin.
+    static func hash(_ kind: CapturedKind, _ data: Data) -> String {
+        var payload = Data((kind.rawValue + ":").utf8)
+        payload.append(data)
+        return SHA256.hash(data: payload).map { String(format: "%02x", $0) }.joined()
     }
 }
