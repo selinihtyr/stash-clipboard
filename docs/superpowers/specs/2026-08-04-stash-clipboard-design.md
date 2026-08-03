@@ -81,7 +81,7 @@ Clip
   id            UUID
   createdAt     Date
   kind          text | image | link | file
-  text          String?       (metin içeriği)
+  text          String?       (metin içeriği; kind == file ise dosyanın URL'i)
   imagePath     String?       (görselin diskteki yolu)
   sourceApp     String?       (bundle id) + görünen ad
   pinned        Bool
@@ -107,7 +107,7 @@ Arama: `text` sütununda `LIKE` sorgusu. Birkaç bin satırda yeterince hızlı;
 
 Otomatik süre veya sayı sınırı yok. Kullanıcı eylemleri: tek kartı sil, son bir saati sil, tümünü temizle.
 
-Tek otomatik davranış: `images/` dizini 2 GB'ı aşarsa en eski **görsel dosyaları** silinir. Kart kaydı ve metni kalır, kart "görsel artık saklanmıyor" durumuna geçer. Ayarlarda kaplanan alan her zaman görünür.
+Tek otomatik davranış: `images/` dizini 2 GB'ı aşarsa en eski **görsel dosyaları** silinir — dizin 1,5 GB'ın altına inene kadar. (Eşiğin hemen altında durulsaydı her yeni görselde budama tetiklenirdi.) Sabitlenmiş kartların görselleri budanmaz. Kart kaydı ve metni kalır, kart "görsel artık saklanmıyor" durumuna geçer. Ayarlarda kaplanan alan her zaman görünür.
 
 ## Kullanım akışı
 
@@ -115,10 +115,12 @@ Tek otomatik davranış: `images/` dizini 2 GB'ı aşarsa en eski **görsel dosy
 2. ← → ile gezinme; yazmaya başlayınca üstte arama alanı belirir ve kartlar süzülür.
 3. ↵ → kart panoya yazılır ve öndeki uygulamaya yapıştırılır, şerit kapanır.
 4. ⌘1…⌘9 → o sıradaki kartı doğrudan yapıştır.
-5. ⌥↵ → düz metin olarak yapıştır.
-6. ⌃P sabitle · ⌫ sil · ⇥ raflar arası geçiş · Esc kapat.
+5. ⌥↵ → filtrelenmiş yapıştır (ayarlarda açık olan bütün filtreler sırayla uygulanır).
+6. ⌃P sabitle · ⌃S rafa taşı · ⌫ sil · ⇥ sekmeler arası geçiş · Esc kapat.
 
 Şerit farenin bulunduğu ekranda açılır. Dışarı tıklama, Esc veya uygulama değişimi kapatır.
+
+**Sekmeler:** `Tümü` · `Sabitlenen` · `Görseller` · ardından kullanıcının oluşturduğu raflar. İlk üçü sabittir ve silinemez — `Sabitlenen` `pinned` alanına, `Görseller` `kind == image` koşuluna bakar, ikisi de raf değildir. Raflar ayarlarda oluşturulup silinir; bir kart ⌃S ile rafa taşınır ve `shelfId` alanına yazılır. Bir kart aynı anda tek rafta bulunur.
 
 **Pencere davranışı:** `NSPanel`, `.nonactivatingPanel` stili, `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]`. Bu ikisi Space zıplamasını ve tam ekran uygulamaların üstünde görünmeme sorununu baştan engeller.
 
@@ -127,6 +129,20 @@ Tek otomatik davranış: `images/` dizini 2 GB'ı aşarsa en eski **görsel dosy
 Koyu plum panel (`#3A2D50` → `#211D2D` degrade), mor vurgu (`#A06CF5`), buzlu cam. Kartlar 162×200px, seçili kart 224px'e büyür. Tip etiketi mono ve küçük (`GÖRSEL`, `METİN`, `BAĞLANTI`), içerik altında.
 
 Tek tema: koyu. Açık tema v1'de yok.
+
+## Ayarlar
+
+Menü çubuğu ikonundan açılan tek pencere. Ayarlanabilenler:
+
+- Global kısayol (varsayılan ⌥⌘V)
+- Açılışta başlat
+- Aktif yapıştırma filtreleri ve sıraları
+- Kaydedilmeyecek uygulamalar (kara liste)
+- Raf oluştur / sil / yeniden adlandır
+- Kaplanan disk alanı (salt okunur) + "Tümünü temizle" ve "Son bir saati temizle"
+- Erişilebilirlik izni durumu + izin verme kısayolu
+
+Değerler `UserDefaults`'ta tutulur; raflar veritabanında.
 
 ## Gizlilik
 
