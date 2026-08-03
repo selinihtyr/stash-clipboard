@@ -1,6 +1,6 @@
 import Foundation
 
-public enum PasteFilter: String, CaseIterable, Sendable {
+public enum PasteFilter: String, CaseIterable, Sendable, Codable {
     case plainText
     case collapseWhitespace
     case straightenQuotes

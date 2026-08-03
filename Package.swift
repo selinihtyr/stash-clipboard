@@ -16,5 +16,9 @@ let package = Package(
         .testTarget(name: "HotKeyTests", dependencies: ["HotKey"]),
         .target(name: "PasteEngine", dependencies: ["Filters"]),
         .testTarget(name: "PasteEngineTests", dependencies: ["PasteEngine", "Filters"]),
+        .target(name: "StashCore",
+                dependencies: ["Store", "PasteboardKit", "PasteEngine", "Filters", "HotKey"]),
+        .testTarget(name: "StashCoreTests",
+                    dependencies: ["StashCore", "Store", "PasteEngine", "Filters"]),
     ]
 )
