@@ -238,14 +238,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .moveLeft: model.moveSelection(by: -1)
             case .moveRight: model.moveSelection(by: 1)
             case .paste(let filtered):
-                self.finishPaste(model.pasteSelected(applyingFilters: filtered))
+                self.handle(model.attemptPaste(applyingFilters: filtered))
             case .pasteIndex(let index):
                 // Görünürden az kart varken ⌘N basılırsa hiçbir şey olmamalı;
                 // aksi halde eski seçim sessizce yapıştırılır — yanlış kartı
                 // panoya göndermek boş yapmaktan daha kötü.
                 guard model.visible.indices.contains(index) else { break }
                 model.select(index: index)
-                self.finishPaste(model.pasteSelected(applyingFilters: false))
+                self.handle(model.attemptPaste(applyingFilters: false))
             case .togglePin: try? model.togglePinSelected()
             case .delete: try? model.deleteSelected()
             case .nextTab: self.advanceTab()
@@ -264,18 +264,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.show(on: Self.screenWithMouse())
     }
 
-    /// Yapıştırma isteği üç farklı sonuçla dönebilir; sessizce yutmak
-    /// kullanıcıyı kör bırakır — özellikle klavyeden gidiliyorsa görsel bir
-    /// ipucu yok, tek geri bildirim bu.
-    private func finishPaste(_ outcome: PasteOutcome?) {
-        guard let outcome else {
-            // nil = seçili bir şey yok ya da seçili kartın yapıştırılacak
-            // içeriği yok (boş şerit, ya da Return'e basılan an). Hiçbir şey
-            // seçilmediyse hiçbir şey kapanmamalı — panel açık kalır, zaten
-            // boş durumda başlıktaki "Henüz bir şey kopyalamadın." zaten
-            // sebebini söylüyor; ayrı bir uyarıya gerek yok.
+    /// `attemptPaste`in üç sonucunu yorumlar (I3): hiçbir kart seçili
+    /// değilse (boş şerit) sessizce hiçbir şey yapmaz — panel açık kalır,
+    /// zaten boş durumda başlıktaki "Henüz bir şey kopyalamadın." sebebini
+    /// söylüyor, ayrı bir uyarıya gerek yok. Görünür bir kart seçiliyken
+    /// yapıştıracak içeriği kalmamışsa (ör. budanmış bir görsel) bunu artık
+    /// ayırt edip görünür bir uyarı gösteriyor — eskiden ikisi de aynı
+    /// sessizliğe düşüyordu, kullanıcı görünen bir kartın üstünde ↵'e basıp
+    /// hiçbir şey olmadığını görüyordu.
+    private func handle(_ attempt: StripModel.PasteAttempt) {
+        switch attempt {
+        case .nothingSelected:
             return
+        case .nothingToPaste:
+            presentNothingToPasteAlert()
+        case .outcome(let outcome):
+            finishPaste(outcome)
         }
+    }
+
+    private func presentNothingToPasteAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Bu kartta yapıştıracak bir şey yok"
+        alert.informativeText = "Görseli artık saklanmıyor. Sil, ya da yeniden kopyala."
+        alert.addButton(withTitle: "Tamam")
+        alert.runModal()
+    }
+
+    private func finishPaste(_ outcome: PasteOutcome) {
         panel?.dismiss()
         switch outcome {
         case .pastedIntoFrontmostApp:

@@ -421,12 +421,22 @@ public final class ClipStore {
     /// Aynı içerik tekrar kopyalandığında yeni satır açmaz; mevcut satırın
     /// tarihini günceller, böylece kart listenin başına döner ve geçmiş
     /// aynı şeyin kopyalarıyla dolmaz.
+    ///
+    /// `imagePath = COALESCE(?, imagePath)`: verilen değer NULL ise mevcut
+    /// değeri olduğu gibi bırakır. Metin/bağlantı/dosya klipleri için
+    /// `clip.imagePath` zaten hep nil, bu yüzden onlarda davranış değişmedi.
+    /// Görseller için bu, budanmış (imagePath NULL'a düşmüş) bir satırın
+    /// aynı içerik yeniden kopyalandığında GERÇEKTEN geri yüklenebilmesini
+    /// sağlıyor (I3): `CaptureCoordinator.tick()` artık dosyayı yeniden
+    /// yazdığında yeni yolu buraya taşıyor, eskiden bu UPDATE imagePath'e
+    /// hiç dokunmadığı için o yeni yol satıra asla ulaşmıyordu.
     public func upsert(_ clip: Clip) throws {
         // El yapımı tırnak kaçışı "Bob's Editor" gibi isimlerde sözdizimini
         // kırıyordu (NSRunningApplication.localizedName bunu besliyor); bound
         // parametreler bu hata sınıfını tamamen ortadan kaldırır.
         let sql = """
-            UPDATE clips SET createdAt = ?, sourceBundleID = ?, sourceName = ?
+            UPDATE clips SET createdAt = ?, sourceBundleID = ?, sourceName = ?,
+                             imagePath = COALESCE(?, imagePath)
             WHERE contentHash = ?;
             """
         var stmt: OpaquePointer?
@@ -437,7 +447,8 @@ public final class ClipStore {
         sqlite3_bind_double(stmt, 1, clip.createdAt.timeIntervalSince1970)
         bindText(stmt, 2, clip.sourceBundleID)
         bindText(stmt, 3, clip.sourceName)
-        bindText(stmt, 4, clip.contentHash)
+        bindText(stmt, 4, clip.imagePath)
+        bindText(stmt, 5, clip.contentHash)
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             throw StoreError.queryFailed(String(cString: sqlite3_errmsg(db)))
         }

@@ -181,6 +181,34 @@ private func makeModel(_ texts: [String]) throws -> (StripModel, ClipStore, Reco
     #expect(model.visible.map(\.id) == [shelvedID])
 }
 
+@MainActor @Test func attemptPasteReportsNothingSelectedForAnEmptyStrip() throws {
+    let (model, _, _) = try makeModel([])
+    #expect(model.attemptPaste(applyingFilters: false) == .nothingSelected)
+}
+
+@MainActor @Test func attemptPasteReportsNothingToPasteForAPrunedImageCard() throws {
+    // I3: bir görsel budandığında satır kalır ama imagePath nil'e düşer —
+    // kart görünür ve seçili olabilir, ama yapıştıracak içeriği yok. Eskiden
+    // bu, hiçbir kart seçili olmamasıyla aynı `nil`e düşüyordu; ↵'e basmak
+    // görünür bir geri bildirim olmadan hiçbir şey yapmıyordu.
+    let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("stash-core-\(UUID().uuidString)")
+    let store = try ClipStore(directory: dir)
+    try store.insert(Clip(id: UUID(), createdAt: Date(), kind: .image, text: nil,
+                          imagePath: nil, sourceBundleID: nil, sourceName: nil,
+                          pinned: false, shelfID: nil, contentHash: "pruned-img", byteSize: 0))
+    let model = StripModel(store: store,
+                           engine: PasteEngine(pasteboard: RecordingWriter(), keystrokes: TrustedKeys()),
+                           settings: .defaults)
+    try model.reload()
+    #expect(model.attemptPaste(applyingFilters: false) == .nothingToPaste)
+}
+
+@MainActor @Test func attemptPasteReportsTheOutcomeForAPasteableCard() throws {
+    let (model, _, _) = try makeModel(["bir", "iki"])
+    #expect(model.attemptPaste(applyingFilters: false) == .outcome(.pastedIntoFrontmostApp))
+}
+
 @MainActor @Test func defaultBlocklistCoversThePasswordManagers() {
     #expect(Settings.defaults.blockedBundleIDs.contains("com.1password.1password"))
     #expect(Settings.defaults.blockedBundleIDs.contains("com.apple.keychainaccess"))

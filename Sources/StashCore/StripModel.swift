@@ -99,6 +99,28 @@ public final class StripModel: ObservableObject {
         return engine.paste(text: text, filters: filters)
     }
 
+    /// `pasteSelected` iki farklı "hiçbir şey olmadı" durumunu aynı `nil`
+    /// ile döndürüyor: hiçbir kart seçili değilken (boş şerit — başlık
+    /// zaten sebebini söylüyor, sessiz kalmak doğru) ve seçili bir kart
+    /// görünürken ama yapıştıracak içeriği kalmamışken (I3: budanmış bir
+    /// görsel — kart "görsel artık saklanmıyor" diyor ama ↵'e basmak hâlâ
+    /// hiçbir şey yapmıyordu, hiçbir geri bildirim yok). Çağıran taraf
+    /// (`AppDelegate`) bu ikisini ayırt edip yalnızca ikincisinde görünür
+    /// bir uyarı göstermeli — bu yüzden karar burada, `pasteSelected`in
+    /// imzasını (ve onu zaten test eden `StripModelTests`i) bozmadan ayrı
+    /// bir yüzeyde.
+    public enum PasteAttempt: Equatable {
+        case nothingSelected
+        case nothingToPaste
+        case outcome(PasteOutcome)
+    }
+
+    public func attemptPaste(applyingFilters: Bool) -> PasteAttempt {
+        guard visible.indices.contains(selectedIndex) else { return .nothingSelected }
+        guard let outcome = pasteSelected(applyingFilters: applyingFilters) else { return .nothingToPaste }
+        return .outcome(outcome)
+    }
+
     public func togglePinSelected() throws {
         guard visible.indices.contains(selectedIndex) else { return }
         let clip = visible[selectedIndex]

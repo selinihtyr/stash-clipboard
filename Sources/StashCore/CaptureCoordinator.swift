@@ -34,17 +34,27 @@ public final class CaptureCoordinator {
         let front = NSWorkspace.shared.frontmostApplication
         guard let captured = capture.poll(frontmostBundleID: front?.bundleIdentifier) else { return }
         do {
-            let id = UUID()
-            var imagePath: String?
-            // Aynı içerik zaten depolanıyorsa upsert var olan satırı günceller
-            // (imagePath'e dokunmadan) — burada yeni bir dosya yazarsak hiçbir
-            // satır ona işaret etmez ve orphan dosya, imagesByteSize() üzerinden
-            // pruneImages'ı bozar (görülemeyen dosyalar hedefi hep yüksek tutar).
-            // Önce kontrol ederek "yaz sonra sil" dansından da kaçınıyoruz.
-            let alreadyStored = try store.find(contentHash: captured.contentHash) != nil
-            // Diske yazma satır eklemeden önce olmalı: yazma başarısız olursa
-            // hiç var olmayan bir dosyaya işaret eden satır oluşmaz.
-            if !alreadyStored, let data = captured.imageData {
+            // Var olan satırı ID'siyle birlikte alıyoruz: bir satır zaten
+            // varsa dosyayı onun ID'siyle adlandırıp yeniden yazıyoruz (yeni
+            // bir ID ile yazmak, upsert contentHash'e göre eski satırı
+            // güncelleyeceği için hiçbir satırın adlandırmadığı bir dosya
+            // bırakırdı — tam da bu fonksiyonun kaçınmaya çalıştığı orphan).
+            let existing = try store.find(contentHash: captured.contentHash)
+            let id = existing?.id ?? UUID()
+            var imagePath = existing?.imagePath
+            // Dosya gerçekten yazılmalı mı? Satır hiç yoksa (ilk yakalama)
+            // ya da satır var ama dosyası yok (budanmış — I3: `imagePath`
+            // NULL'a düşmüş — ya da diskten elle silinmiş) evet; satır zaten
+            // geçerli bir dosyaya işaret ediyorsa hayır — burada yeniden
+            // yazmak, hiçbir satırın işaret etmediği bir dosya bırakmaz ama
+            // gereksiz bir yazma+orphan riski de taşımaz (asıl orphan
+            // korumasının nedeni buydu, C3/pruneImages'ın üstündeki gerekçeye
+            // bkz.) — o korumayı burada da koruyoruz.
+            let fileMissing = imagePath.map { !FileManager.default.fileExists(atPath: $0) } ?? true
+            // Diske yazma satır eklemeden/güncellemeden önce olmalı: yazma
+            // başarısız olursa hiç var olmayan bir dosyaya işaret eden satır
+            // oluşmaz/güncellenmez.
+            if fileMissing, let data = captured.imageData {
                 let url = store.imagesDirectory.appendingPathComponent("\(id.uuidString).png")
                 try data.write(to: url)
                 imagePath = url.path

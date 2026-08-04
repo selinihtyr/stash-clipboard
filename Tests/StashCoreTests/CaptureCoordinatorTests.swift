@@ -57,6 +57,36 @@ private func makeCoordinator() throws -> (CaptureCoordinator, ClipStore, FakeCap
     #expect(files.count == 1)
 }
 
+@MainActor @Test func recapturingAPrunedImageRestoresTheFileAndThePath() throws {
+    // I3: pruneImages bir satırın imagePath'ini NULL'a düşürüyor ama satırı
+    // tutuyor (kart "görsel artık saklanmıyor" diyebilsin diye). Aynı görsel
+    // yeniden kopyalanınca eski kod yalnızca "bu contentHash'e sahip bir
+    // satır VAR MI"ya bakıyordu — evet vardı, o yüzden dosyayı hiç yeniden
+    // yazmıyordu ve imagePath sonsuza dek nil kalıyordu.
+    let (coordinator, store, pb) = try makeCoordinator()
+    let png = Data([0x89, 0x50, 0x4E, 0x47, 0x01, 0x02, 0x03])
+    pb.putImage(png)
+    coordinator.tick()
+    let firstPath = try #require(try store.recent(limit: 10).first?.imagePath)
+    #expect(FileManager.default.fileExists(atPath: firstPath))
+
+    // Tek satırı, tek başına highWater'ın üstüne çıkaracak kadar düşük bir
+    // eşikle budayarak "görsel artık saklanmıyor" durumuna sokuyoruz.
+    _ = try store.pruneImages(highWater: 0, lowWater: 0)
+    let pruned = try #require(try store.recent(limit: 10).first)
+    #expect(pruned.imagePath == nil)
+    #expect(!FileManager.default.fileExists(atPath: firstPath))
+
+    // Aynı görsel yeniden kopyalanıyor.
+    pb.putImage(png)
+    coordinator.tick()
+
+    let rows = try store.recent(limit: 10)
+    #expect(rows.count == 1) // hâlâ tek satır: yeni bir tane açılmadı
+    let restoredPath = try #require(rows.first?.imagePath)
+    #expect(FileManager.default.fileExists(atPath: restoredPath))
+}
+
 /// Sahte PNG başlıkları (bu dosyadaki `png` sabiti gibi) NSImage tarafından
 /// çözülemez — küçük resim üretimi "başarısız olmalı" testleri için doğru,
 /// ama "başarılı olmalı" testleri gerçek, çözülebilir bir görsel ister.
