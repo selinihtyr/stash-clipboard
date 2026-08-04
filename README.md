@@ -134,17 +134,26 @@ Sürümden önce çalıştırılacak elle QA listesi: `docs/manual-qa.md`.
 
 Kopyalama ve yapıştırma geri bildirim sesleri (`Sources/Stash/Resources/
 Sounds/copy.wav`, `paste.wav`) macOS sistem sesi değildir — Freesound'dan
-alınmış, aşağıdaki lisansla kullanılan bir kayıttır. **Bu, kod için geçerli
-MIT lisansından ayrıdır ve MIT değildir**; kaynak ve şart aşağıda:
+alınmış **iki ayrı kayıttır ve lisansları da ayrıdır**. İkisi de kod için
+geçerli MIT lisansının kapsamı dışındadır:
+
+**`copy.wav` — atıf zorunlu**
 
 - Kaynak: "soft sound plastic button click", orginaljun —
   https://freesound.org/s/150382/
 - Lisans: Creative Commons Attribution 3.0 Unported (CC-BY 3.0) —
   https://creativecommons.org/licenses/by/3.0/
-- `copy.wav`: kaynağın kırpılmış, seviyesi ayarlanmış hali.
-- `paste.wav`: aynı kaydın **türevi** (perdesi kaydırılmış), ardından
-  kırpılmış ve seviyesi ayarlanmış — CC-BY 3.0 türevlere de izin verir,
-  değişiklik yapıldığı bu şekilde belirtilir.
+- Değişiklik: mono'ya indirildi, kırpıldı, sonu yumuşatıldı, seviyesi
+  düşürüldü. CC-BY 3.0 türevlere izin verir ve değişikliğin belirtilmesini
+  şart koşar; bu satır o şartı karşılar.
+
+**`paste.wav` — atıf zorunlu değil**
+
+- Kaynak: "inventory_select", obrymec — https://freesound.org/s/580829/
+- Lisans: Creative Commons 0 (CC0) — kamu malı ithafı,
+  https://creativecommons.org/publicdomain/zero/1.0/
+- Değişiklik: mono'ya indirildi, kırpıldı, sonu yumuşatıldı, seviyesi
+  ayarlandı. Künye nezaketen verilmiştir.
 
 Aynı bilgi, dosyaların yanında da duruyor:
 `Sources/Stash/Resources/Sounds/CREDITS.txt` — klasör repodan ayrı
@@ -152,5 +161,5 @@ kopyalanırsa lisans şartı da onunla gitsin diye.
 
 ## Lisans
 
-Kod: MIT. Yukarıdaki iki ses dosyası hariç — onlar CC-BY 3.0 ("Ses
+Kod: MIT. Yukarıdaki iki ses dosyası hariç — copy.wav CC-BY 3.0, paste.wav CC0 ("Ses
 kredileri" bölümüne bakın).
