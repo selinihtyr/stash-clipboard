@@ -87,19 +87,33 @@ public final class StripModel: ObservableObject {
         selectedIndex = index
     }
 
-    public func pasteSelected(applyingFilters: Bool) -> PasteOutcome? {
-        guard visible.indices.contains(selectedIndex) else { return nil }
+    /// `restoreFocus`u doğrudan `engine.paste`e aktarır, hiç dokunmadan —
+    /// bu, panelin ne zaman/nasıl kapandığını bilen tek katmanın (AppDelegate)
+    /// hâlâ o kancayı sağladığı, `StripModel`in (ya da `PasteEngine`in) bir
+    /// `NSPanel` bilmesi gerekmediği anlamına geliyor.
+    ///
+    /// Dönüş değeri artık `PasteOutcome?` değil `Bool`: içerik gerçekten
+    /// var mıydı (yapıştırma denendi mi) sorusunu senkron cevaplıyor,
+    /// sonucun kendisi (izin/tuş başarısı) `completion`a asenkron geliyor —
+    /// engine artık odak geri verilene kadar sonucu bilmiyor.
+    @discardableResult
+    public func pasteSelected(applyingFilters: Bool,
+                              restoreFocus: @escaping FocusRestoration,
+                              completion: @escaping (PasteOutcome) -> Void) -> Bool {
+        guard visible.indices.contains(selectedIndex) else { return false }
         let clip = visible[selectedIndex]
         let filters = applyingFilters ? settings.activeFilters : []
         if clip.kind == .image, let path = clip.imagePath,
            let data = FileManager.default.contents(atPath: path) {
-            return engine.paste(imageData: data)
+            engine.paste(imageData: data, restoreFocus: restoreFocus, completion: completion)
+            return true
         }
-        guard let text = clip.text else { return nil }
-        return engine.paste(text: text, filters: filters)
+        guard let text = clip.text else { return false }
+        engine.paste(text: text, filters: filters, restoreFocus: restoreFocus, completion: completion)
+        return true
     }
 
-    /// `pasteSelected` iki farklı "hiçbir şey olmadı" durumunu aynı `nil`
+    /// `pasteSelected` iki farklı "hiçbir şey olmadı" durumunu aynı `false`
     /// ile döndürüyor: hiçbir kart seçili değilken (boş şerit — başlık
     /// zaten sebebini söylüyor, sessiz kalmak doğru) ve seçili bir kart
     /// görünürken ama yapıştıracak içeriği kalmamışken (I3: budanmış bir
@@ -115,10 +129,18 @@ public final class StripModel: ObservableObject {
         case outcome(PasteOutcome)
     }
 
-    public func attemptPaste(applyingFilters: Bool) -> PasteAttempt {
-        guard visible.indices.contains(selectedIndex) else { return .nothingSelected }
-        guard let outcome = pasteSelected(applyingFilters: applyingFilters) else { return .nothingToPaste }
-        return .outcome(outcome)
+    /// Sonuç artık senkron dönmüyor: `.nothingSelected`/`.nothingToPaste`
+    /// (engine hiç devreye girmeden bilinen durumlar) `completion`a hemen
+    /// gelir, `.outcome` ise `restoreFocus` `proceed`i çağırana kadar
+    /// gecikebilir — bkz. `PasteEngine.FocusRestoration`.
+    public func attemptPaste(applyingFilters: Bool,
+                             restoreFocus: @escaping FocusRestoration,
+                             completion: @escaping (PasteAttempt) -> Void) {
+        guard visible.indices.contains(selectedIndex) else { completion(.nothingSelected); return }
+        let attempted = pasteSelected(applyingFilters: applyingFilters, restoreFocus: restoreFocus) { outcome in
+            completion(.outcome(outcome))
+        }
+        if !attempted { completion(.nothingToPaste) }
     }
 
     public func togglePinSelected() throws {

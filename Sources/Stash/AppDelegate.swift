@@ -264,14 +264,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .moveLeft: model.moveSelection(by: -1)
             case .moveRight: model.moveSelection(by: 1)
             case .paste(let filtered):
-                self.handle(model.attemptPaste(applyingFilters: filtered))
+                self.attemptPaste(model: model, applyingFilters: filtered)
             case .pasteIndex(let index):
                 // Görünürden az kart varken ⌘N basılırsa hiçbir şey olmamalı;
                 // aksi halde eski seçim sessizce yapıştırılır — yanlış kartı
                 // panoya göndermek boş yapmaktan daha kötü.
                 guard model.visible.indices.contains(index) else { break }
                 model.select(index: index)
-                self.handle(model.attemptPaste(applyingFilters: false))
+                self.attemptPaste(model: model, applyingFilters: false)
             case .togglePin: try? model.togglePinSelected()
             case .delete: try? model.deleteSelected()
             case .nextTab: self.advanceTab()
@@ -288,6 +288,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.panel = panel
         panel.show(on: Self.screenWithMouse())
+    }
+
+    /// Şeridi kapatıp klavye odağını önce yapıştırılacak uygulamaya geri
+    /// veren, ANCAK BUNDAN SONRA sentetik ⌘V'nin gönderilmesine izin veren
+    /// tek yer. `StripModel.attemptPaste`in `restoreFocus` parametresi tam
+    /// olarak bunun için var (bkz. `PasteEngine.FocusRestoration`): panel
+    /// hâlâ key window iken tuş gönderilirse tuş panelin kendisine düşer,
+    /// öndeki uygulamaya asla ulaşmaz — kritik hatanın kendisi buydu.
+    ///
+    /// `panel?.dismiss()` senkron (orderOut çağırıyor) ama pencere sunucusunun
+    /// bir sonraki uygulamayı GERÇEKTEN key window yapması aynı run loop
+    /// turunda garanti değil; bu yüzden `proceed()`i bir sonraki turda
+    /// çağırıyoruz. Bu kancayı hiç sağlamamak (ya da `proceed()`i hemen,
+    /// senkron çağırmak) eski hatayı birebir geri getirir — API bunu
+    /// atlamayı imkansız kılıyor ama YANLIŞ implemente etmeyi engellemiyor,
+    /// bu yüzden bu tek nokta özenle doğru tutulmalı.
+    private func attemptPaste(model: StripModel, applyingFilters: Bool) {
+        model.attemptPaste(applyingFilters: applyingFilters, restoreFocus: { [weak self] proceed in
+            self?.panel?.dismiss()
+            // `proceed`i aynı turda değil, bir sonraki main-actor turunda
+            // çağırıyoruz: dismiss() (orderOut) senkron dönse de pencere
+            // sunucusunun bir sonraki uygulamayı GERÇEKTEN key window yapması
+            // aynı turda garanti değil — sentetik ⌘V'yi aynı turda göndermek
+            // asıl hatanın kendisiydi. `Task { @MainActor in }`, hem `self`
+            // hem `proceed` zaten bu @MainActor sınıfın içinde yaşadığı için
+            // GCD'nin `@Sendable` şartına takılmadan aynı erteleme etkisini
+            // veriyor.
+            Task { @MainActor in proceed() }
+        }, completion: { [weak self] attempt in
+            self?.handle(attempt)
+        })
     }
 
     /// `attemptPaste`in üç sonucunu yorumlar (I3): hiçbir kart seçili
@@ -324,8 +355,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.runModal()
     }
 
+    /// Panel burada DEĞİL, `attemptPaste(model:applyingFilters:)` içindeki
+    /// `restoreFocus` kancasında kapanıyor — yani `deliver()` (dolayısıyla bu
+    /// fonksiyonun çağrılması) her zaman panel zaten kapandıktan SONRA
+    /// gerçekleşiyor. Burada ikinci bir `dismiss()` çağırmak zararsız olurdu
+    /// ama yanıltıcı olurdu: sırayı garanti eden yerin burası olduğu izlenimi
+    /// verirdi, oysa gerçek garanti restoreFocus kancasında.
     private func finishPaste(_ outcome: PasteOutcome) {
-        panel?.dismiss()
         switch outcome {
         case .pastedIntoFrontmostApp:
             return

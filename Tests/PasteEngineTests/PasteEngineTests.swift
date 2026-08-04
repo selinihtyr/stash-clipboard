@@ -32,9 +32,34 @@ final class FakeKeystrokes: KeystrokeSending {
     }
 }
 
+/// Testlerin çoğu odağı gerçekten geri vermekle ilgilenmiyor — `proceed`u
+/// hemen çağıran bu, "restoreFocus'u atlayıp deliver'a geç" isteyen bir
+/// çağıranın API'de bunu yapabileceği bir yol OLMADIĞINI kanıtlıyor: tek
+/// yol budur, ve o da engine'in kendisi tarafından çağrılıyor.
+func immediateFocusRestoration(_ proceed: @escaping () -> Void) { proceed() }
+
+/// paste(...)'in senkron bir dönüş değeri kalmadığı için testler sonucu
+/// completion kancasına yakalıyor. `immediateFocusRestoration` senkron
+/// olduğu sürece tüm zincir (yaz → restoreFocus → deliver → completion)
+/// aynı çağrı içinde biter, bu yüzden aşağıdaki #expect'ler hâlâ hemen
+/// ardından güvenle okunabiliyor.
+@discardableResult
+func syncPaste(_ engine: PasteEngine, text: String, filters: [PasteFilter] = []) -> PasteOutcome {
+    var result: PasteOutcome!
+    engine.paste(text: text, filters: filters, restoreFocus: immediateFocusRestoration) { result = $0 }
+    return result
+}
+
+@discardableResult
+func syncPaste(_ engine: PasteEngine, imageData: Data) -> PasteOutcome {
+    var result: PasteOutcome!
+    engine.paste(imageData: imageData, restoreFocus: immediateFocusRestoration) { result = $0 }
+    return result
+}
+
 @Test func pastingWritesToThePasteboardThenSendsCommandV() {
     let pb = FakePasteboardWriter(); let keys = FakeKeystrokes()
-    let outcome = PasteEngine(pasteboard: pb, keystrokes: keys).paste(text: "merhaba", filters: [])
+    let outcome = syncPaste(PasteEngine(pasteboard: pb, keystrokes: keys), text: "merhaba")
     #expect(pb.lastText == "merhaba")
     #expect(keys.sentCount == 1)
     #expect(outcome == .pastedIntoFrontmostApp)
@@ -45,7 +70,7 @@ final class FakeKeystrokes: KeystrokeSending {
     // yapmamak en kötü davranış olurdu.
     let pb = FakePasteboardWriter(); let keys = FakeKeystrokes()
     keys.isTrusted = false
-    let outcome = PasteEngine(pasteboard: pb, keystrokes: keys).paste(text: "merhaba", filters: [])
+    let outcome = syncPaste(PasteEngine(pasteboard: pb, keystrokes: keys), text: "merhaba")
     #expect(pb.lastText == "merhaba")
     #expect(keys.sentCount == 0)
     #expect(outcome == .copiedOnlyNoAccessibilityPermission)
@@ -53,8 +78,8 @@ final class FakeKeystrokes: KeystrokeSending {
 
 @Test func filtersRunBeforeTheTextReachesThePasteboard() {
     let pb = FakePasteboardWriter()
-    _ = PasteEngine(pasteboard: pb, keystrokes: FakeKeystrokes())
-        .paste(text: "  a   b  ", filters: [.collapseWhitespace])
+    syncPaste(PasteEngine(pasteboard: pb, keystrokes: FakeKeystrokes()),
+             text: "  a   b  ", filters: [.collapseWhitespace])
     #expect(pb.lastText == "a b")
 }
 
@@ -62,8 +87,8 @@ final class FakeKeystrokes: KeystrokeSending {
     // .plainText metni değiştirmez; anlamı zengin temsilleri yazmamaktır,
     // ve bu karar pano katmanında verilir.
     let pb = FakePasteboardWriter()
-    _ = PasteEngine(pasteboard: pb, keystrokes: FakeKeystrokes())
-        .paste(text: "kalın metin", filters: [.plainText])
+    syncPaste(PasteEngine(pasteboard: pb, keystrokes: FakeKeystrokes()),
+             text: "kalın metin", filters: [.plainText])
     #expect(pb.lastPlainOnly == true)
 }
 
@@ -73,7 +98,7 @@ final class FakeKeystrokes: KeystrokeSending {
     // sanır.
     let pb = FakePasteboardWriter(); let keys = FakeKeystrokes()
     keys.succeeds = false
-    let outcome = PasteEngine(pasteboard: pb, keystrokes: keys).paste(text: "merhaba", filters: [])
+    let outcome = syncPaste(PasteEngine(pasteboard: pb, keystrokes: keys), text: "merhaba")
     #expect(pb.lastText == "merhaba")
     #expect(outcome == .copiedOnlyKeystrokeFailed)
 }
@@ -87,15 +112,91 @@ final class FakeKeystrokes: KeystrokeSending {
     var reported: [Int] = []
     let engine = PasteEngine(pasteboard: pb, keystrokes: keys)
     engine.onWrite = { reported.append($0) }
-    _ = engine.paste(text: "bir", filters: [])
-    _ = engine.paste(imageData: Data([1, 2, 3]))
+    syncPaste(engine, text: "bir")
+    syncPaste(engine, imageData: Data([1, 2, 3]))
     #expect(reported == [pb.changeCount - 1, pb.changeCount])
 }
 
 @Test func imagesGoThroughTheSamePermissionLogic() {
     let pb = FakePasteboardWriter(); let keys = FakeKeystrokes()
     keys.isTrusted = false
-    let outcome = PasteEngine(pasteboard: pb, keystrokes: keys).paste(imageData: Data([1, 2, 3]))
+    let outcome = syncPaste(PasteEngine(pasteboard: pb, keystrokes: keys), imageData: Data([1, 2, 3]))
     #expect(pb.lastImage == Data([1, 2, 3]))
     #expect(outcome == .copiedOnlyNoAccessibilityPermission)
+}
+
+// MARK: - Odak geri verme sırası (bkz. PasteEngine.FocusRestoration gerekçesi)
+//
+// Kritik hata buradaydı: sentetik ⌘V, şerit paneli hâlâ key window iken
+// gönderiliyordu, tuş kendi panelimize düşüyordu. Aşağıdaki testler ordering'i
+// doğruluyor — write → restoreFocus → (yalnızca proceed çağrılınca) deliver.
+
+/// `restoreFocus`u hiç çağırmayan bir odak geri verici: deliver'ın GERÇEKTEN
+/// bu kancadan geçmeden asla tetiklenmediğini kanıtlıyor. Çağrılmazsa ne
+/// tuş gönderilir ne de completion çağrılır.
+@Test func deliverNeverHappensIfRestoreFocusNeverCallsProceed() {
+    let pb = FakePasteboardWriter(); let keys = FakeKeystrokes()
+    var completionCalled = false
+    PasteEngine(pasteboard: pb, keystrokes: keys)
+        .paste(text: "merhaba", filters: [], restoreFocus: { _ in /* proceed çağrılmıyor */ }) { _ in
+            completionCalled = true
+        }
+    #expect(pb.lastText == "merhaba", "yazma restoreFocus'tan ÖNCE olmalı")
+    #expect(keys.sentCount == 0, "restoreFocus proceed'i çağırmadıysa tuş asla gitmemeli")
+    #expect(completionCalled == false)
+}
+
+@Test func writeHappensBeforeRestoreFocusIsInvoked() {
+    let pb = FakePasteboardWriter(); let keys = FakeKeystrokes()
+    var textOnPasteboardWhenRestoreFocusRan: String?
+    PasteEngine(pasteboard: pb, keystrokes: keys)
+        .paste(text: "merhaba", filters: [], restoreFocus: { proceed in
+            textOnPasteboardWhenRestoreFocusRan = pb.lastText
+            proceed()
+        }) { _ in }
+    #expect(textOnPasteboardWhenRestoreFocusRan == "merhaba")
+}
+
+@Test func keystrokeIsPostedOnlyAfterRestoreFocusCallsProceed() {
+    let pb = FakePasteboardWriter(); let keys = FakeKeystrokes()
+    var sentCountWhileInsideRestoreFocus = -1
+    PasteEngine(pasteboard: pb, keystrokes: keys)
+        .paste(text: "merhaba", filters: [], restoreFocus: { proceed in
+            // Kancanın kendisi çalışırken, proceed'i henüz çağırmadan: tuş
+            // hâlâ gönderilmemiş olmalı — sıra budur, aksi halde eski hata.
+            sentCountWhileInsideRestoreFocus = keys.sentCount
+            proceed()
+        }) { _ in }
+    #expect(sentCountWhileInsideRestoreFocus == 0)
+    #expect(keys.sentCount == 1)
+}
+
+@Test func deferredRestoreFocusStillDeliversTheOutcome() {
+    // Gerçek dünyada restoreFocus asenkron (panel kapanıp bir sonraki
+    // run loop turunda proceed çağrılıyor) — engine bunu beklemeli, aynı
+    // turda deliver'a zorlamamalı.
+    let pb = FakePasteboardWriter(); let keys = FakeKeystrokes()
+    var storedProceed: (() -> Void)?
+    var outcome: PasteOutcome?
+    PasteEngine(pasteboard: pb, keystrokes: keys)
+        .paste(text: "merhaba", filters: [], restoreFocus: { proceed in storedProceed = proceed }) {
+            outcome = $0
+        }
+    #expect(keys.sentCount == 0)
+    #expect(outcome == nil)
+    storedProceed?()
+    #expect(keys.sentCount == 1)
+    #expect(outcome == .pastedIntoFrontmostApp)
+}
+
+@Test func imagePasteFollowsTheSameRestoreFocusOrdering() {
+    let pb = FakePasteboardWriter(); let keys = FakeKeystrokes()
+    var sentCountWhileInsideRestoreFocus = -1
+    PasteEngine(pasteboard: pb, keystrokes: keys)
+        .paste(imageData: Data([1, 2, 3]), restoreFocus: { proceed in
+            sentCountWhileInsideRestoreFocus = keys.sentCount
+            proceed()
+        }) { _ in }
+    #expect(sentCountWhileInsideRestoreFocus == 0)
+    #expect(keys.sentCount == 1)
 }

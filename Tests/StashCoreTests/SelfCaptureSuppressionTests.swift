@@ -68,7 +68,7 @@ private func makeHarness() throws -> (CaptureCoordinator, ClipStore, PasteEngine
     coordinator.tick()
     let original = try #require(try store.recent(limit: 10).first)
 
-    _ = engine.paste(text: original.text!, filters: [])
+    engine.paste(text: original.text!, filters: [], restoreFocus: immediateFocusRestoration) { _ in }
     coordinator.tick() // "0,5 saniye sonraki" yoklama
 
     let rows = try store.recent(limit: 10)
@@ -88,7 +88,8 @@ private func makeHarness() throws -> (CaptureCoordinator, ClipStore, PasteEngine
     coordinator.tick()
     #expect(try store.recent(limit: 10).count == 1)
 
-    _ = engine.paste(text: "hello   \u{201C}world\u{201D}\n\nagain", filters: [])
+    engine.paste(text: "hello   \u{201C}world\u{201D}\n\nagain", filters: [],
+                restoreFocus: immediateFocusRestoration) { _ in }
     coordinator.tick()
 
     #expect(try store.recent(limit: 10).count == 1)
@@ -100,7 +101,7 @@ private func makeHarness() throws -> (CaptureCoordinator, ClipStore, PasteEngine
     coordinator.tick()
     #expect(try store.recent(limit: 10).count == 1)
 
-    _ = engine.paste(text: "ilk", filters: [])
+    engine.paste(text: "ilk", filters: [], restoreFocus: immediateFocusRestoration) { _ in }
     // Yapıştırmadan hemen sonra kullanıcı gerçekten başka bir şey kopyalıyor;
     // bu, suppressChangeCount'un işaretlediği TEK changeCount'u geçiyor.
     shared.userCopy("gerçek kopya")
@@ -109,4 +110,36 @@ private func makeHarness() throws -> (CaptureCoordinator, ClipStore, PasteEngine
     let rows = try store.recent(limit: 10)
     #expect(rows.count == 2)
     #expect(rows.contains { $0.text == "gerçek kopya" })
+}
+
+// MARK: - Odak geri verme aralığında gerçek bir kopyalama (bkz. görev
+// tanımındaki "değişiklik sayısı defteri" koşulu)
+//
+// `restoreFocus` artık yazımla sentetik ⌘V arasına gerçek zaman (bir panel
+// kapanışı) sokuyor — üretimde bu, kullanıcının o aralıkta başka bir şeyi
+// GERÇEKTEN kopyalayabileceği bir pencere anlamına geliyor (ör. bir kısayolla
+// tetiklenen başka bir kopyalama, ya da çok hızlı art arda iki ↵). Aşağıdaki
+// test bunu `restoreFocus`u hemen çağırmayıp `proceed`i saklayarak simüle
+// ediyor: `onWrite`/`suppressChangeCount` yazımdan hemen sonra (restoreFocus
+// çağrılmadan ÖNCE) tetiklendiği için, aradaki gerçek kopyalama kendi
+// changeCount'unu suppressChangeCount'un işaretlediği tek değerin ÖTESİNE
+// taşıyor — bu yüzden yutulmuyor.
+@MainActor @Test func aGenuineUserCopyDuringTheFocusRestorationGapIsStillCaptured() throws {
+    let (coordinator, store, engine, shared) = try makeHarness()
+    shared.userCopy("ilk")
+    coordinator.tick()
+    #expect(try store.recent(limit: 10).count == 1)
+
+    var storedProceed: (() -> Void)?
+    engine.paste(text: "ilk", filters: [], restoreFocus: { proceed in storedProceed = proceed }) { _ in }
+    // Panel henüz "kapanmadı" (restoreFocus proceed'i çağırmadı) — tam bu
+    // aralıkta kullanıcı gerçekten başka bir şey kopyalıyor.
+    shared.userCopy("aralıktaki gerçek kopya")
+    let proceed = try #require(storedProceed)
+    proceed() // odak geri verildi, şimdi sentetik ⌘V gidiyor
+    coordinator.tick()
+
+    let rows = try store.recent(limit: 10)
+    #expect(rows.count == 2)
+    #expect(rows.contains { $0.text == "aralıktaki gerçek kopya" })
 }

@@ -26,6 +26,12 @@ final class TrustedKeys: KeystrokeSending {
     func sendCommandV() -> Bool { true }
 }
 
+/// Testlerin çoğu, gerçek odak geri vermeyle değil `pasteSelected`/`attemptPaste`in
+/// davranışıyla ilgileniyor: bu, `proceed`i hemen çağırarak zinciri (yaz →
+/// restoreFocus → deliver → completion) senkron bitiriyor, böylece aşağıdaki
+/// #expect'ler çağrının hemen ardından güvenle okunabiliyor.
+func immediateFocusRestoration(_ proceed: @escaping () -> Void) { proceed() }
+
 @MainActor
 private func makeModel(_ texts: [String]) throws -> (StripModel, ClipStore, RecordingWriter) {
     let dir = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -77,7 +83,8 @@ private func makeModel(_ texts: [String]) throws -> (StripModel, ClipStore, Reco
 
 @MainActor @Test func pastingSelectedSendsTheCardsText() throws {
     let (model, _, writer) = try makeModel(["bir", "iki"])
-    let outcome = model.pasteSelected(applyingFilters: false)
+    var outcome: PasteOutcome?
+    model.pasteSelected(applyingFilters: false, restoreFocus: immediateFocusRestoration) { outcome = $0 }
     #expect(writer.lastText == "iki")
     #expect(outcome == .pastedIntoFrontmostApp)
 }
@@ -96,7 +103,7 @@ private func makeModel(_ texts: [String]) throws -> (StripModel, ClipStore, Reco
                            engine: PasteEngine(pasteboard: writer, keystrokes: TrustedKeys()),
                            settings: settings)
     try model.reload()
-    _ = model.pasteSelected(applyingFilters: true)
+    model.pasteSelected(applyingFilters: true, restoreFocus: immediateFocusRestoration) { _ in }
     #expect(writer.lastText == "a b")
 }
 
@@ -183,7 +190,9 @@ private func makeModel(_ texts: [String]) throws -> (StripModel, ClipStore, Reco
 
 @MainActor @Test func attemptPasteReportsNothingSelectedForAnEmptyStrip() throws {
     let (model, _, _) = try makeModel([])
-    #expect(model.attemptPaste(applyingFilters: false) == .nothingSelected)
+    var attempt: StripModel.PasteAttempt?
+    model.attemptPaste(applyingFilters: false, restoreFocus: immediateFocusRestoration) { attempt = $0 }
+    #expect(attempt == .nothingSelected)
 }
 
 @MainActor @Test func attemptPasteReportsNothingToPasteForAPrunedImageCard() throws {
@@ -201,12 +210,35 @@ private func makeModel(_ texts: [String]) throws -> (StripModel, ClipStore, Reco
                            engine: PasteEngine(pasteboard: RecordingWriter(), keystrokes: TrustedKeys()),
                            settings: .defaults)
     try model.reload()
-    #expect(model.attemptPaste(applyingFilters: false) == .nothingToPaste)
+    var attempt: StripModel.PasteAttempt?
+    model.attemptPaste(applyingFilters: false, restoreFocus: immediateFocusRestoration) { attempt = $0 }
+    #expect(attempt == .nothingToPaste)
 }
 
 @MainActor @Test func attemptPasteReportsTheOutcomeForAPasteableCard() throws {
     let (model, _, _) = try makeModel(["bir", "iki"])
-    #expect(model.attemptPaste(applyingFilters: false) == .outcome(.pastedIntoFrontmostApp))
+    var attempt: StripModel.PasteAttempt?
+    model.attemptPaste(applyingFilters: false, restoreFocus: immediateFocusRestoration) { attempt = $0 }
+    #expect(attempt == .outcome(.pastedIntoFrontmostApp))
+}
+
+// MARK: - Odak geri verme sırası (bkz. PasteEngine.FocusRestoration gerekçesi)
+
+@MainActor @Test func attemptPasteDoesNotDeliverUntilRestoreFocusProceeds() throws {
+    // AppDelegate'in gerçek `restoreFocus` implementasyonu paneli kapatıp
+    // `proceed`i BİR SONRAKİ run loop turuna erteliyor — bu test, StripModel
+    // katmanının bunu zorlamadığını (ama bozmadığını da) doğruluyor: engine'e
+    // kadar hiçbir ara katman `proceed`i erkenden çağırmıyor.
+    let (model, _, writer) = try makeModel(["bir", "iki"])
+    var storedProceed: (() -> Void)?
+    var attempt: StripModel.PasteAttempt?
+    model.attemptPaste(applyingFilters: false, restoreFocus: { proceed in storedProceed = proceed }) {
+        attempt = $0
+    }
+    #expect(writer.lastText == "iki", "pano yazımı restoreFocus çağrılmadan önce olmuş olmalı")
+    #expect(attempt == nil, "restoreFocus proceed'i henüz çağırmadıysa sonuç gelmemeli")
+    storedProceed?()
+    #expect(attempt == .outcome(.pastedIntoFrontmostApp))
 }
 
 @MainActor @Test func defaultBlocklistCoversThePasswordManagers() {
