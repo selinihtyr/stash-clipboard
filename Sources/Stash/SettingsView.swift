@@ -186,11 +186,21 @@ struct SettingsView: View {
         .frame(width: 460, height: 620)
         .onAppear(perform: refresh)
         .onDisappear { recorder.stop() }
-        // Kullanıcı Sistem Ayarları'ndan izin verip Stash'e geri döndüğünde
-        // uygulama yeniden etkinleşir; bu bildirim izin durumunu güncel
-        // tutmanın zamanlayıcı kurmadan yeterli olan tek tetikleyicisi.
+        // Kullanıcı Sistem Ayarları'ndan izin verip ya da Giriş Öğeleri'nden
+        // açılışta başlatmayı kapatıp Stash'e geri döndüğünde uygulama
+        // yeniden etkinleşir; bu bildirim ikisini de güncel tutmanın
+        // zamanlayıcı kurmadan yeterli olan tek tetikleyicisi. Pencere açık
+        // kalıp Stash'e odak geri gelmeden bu ikisi tazelenmezse, tazelenen
+        // tek yol pencereyi kapatıp yeniden açmak olurdu — Ayarlar'ın var
+        // olma amacının tam tersi (fix round 1, bulgu benzeri: bkz. yukarıki
+        // accessibilityTrusted gerekçesi). launchAtLoginEnabled buraya aynı
+        // gerekçeyle katıldı: `docs/manual-qa.md`, pencere kapatılıp
+        // yeniden açılmadan Giriş Öğeleri'nden kapatmanın anahtara
+        // yansımasını beklerken kod önceden sadece izin durumunu
+        // güncelliyordu.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             accessibilityTrusted = AXIsProcessTrusted()
+            launchAtLoginEnabled = LoginItem.isEnabled
         }
         .alert(item: $errorAlert) { message in
             Alert(title: Text(message.title), message: Text(message.detail),

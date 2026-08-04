@@ -89,7 +89,7 @@ kayıtsız kalmaz.
 | ↵ | Yapıştır |
 | ⌥↵ | Filtreleri uygulayarak yapıştır |
 | ⌘1…⌘9 | Sıradaki kartı yapıştır |
-| ⌃P | Sabitle |
+| ⌃P | Sabitle/kaldır |
 | ⌃S | Rafa taşı |
 | ⌘⌫ | Kartı sil |
 | ⇥ | Sekme değiştir |
