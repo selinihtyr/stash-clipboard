@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // `self`e ihtiyaç duymadan kendi kendine kuruluyor, bu yüzden `lazy`
     // ilk erişimde onu güvenle okuyabiliyor.
     private lazy var soundFeedback = SoundFeedbackController(
-        settingsStore: settingsStore, player: SystemSoundPlayer())
+        settingsStore: settingsStore, player: BundledSoundPlayer())
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)

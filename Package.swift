@@ -22,8 +22,12 @@ let package = Package(
                 dependencies: ["Store", "PasteboardKit", "PasteEngine", "Filters", "HotKey"]),
         .testTarget(name: "StashCoreTests",
                     dependencies: ["StashCore", "Store", "PasteEngine", "Filters"]),
+        // "Resources/Sounds": aynı AppIcon.icns mantığı — SwiftPM'in otomatik
+        // kaynak paketleme/`Bundle.module` yolunu değil, `scripts/bundle.sh`nin
+        // elle `Contents/Resources/Sounds`e kopyaladığı, `Bundle.main`den
+        // okunan düz dosyaları izliyoruz (bkz. `SoundFeedback.swift`).
         .executableTarget(name: "Stash", dependencies: ["StashCore", "HotKey", "PasteboardKit"],
-                          exclude: ["Info.plist", "AppIcon.icns"]),
+                          exclude: ["Info.plist", "AppIcon.icns", "Resources/Sounds"]),
         .testTarget(name: "StashTests", dependencies: ["Stash"]),
     ]
 )

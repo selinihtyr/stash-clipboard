@@ -130,6 +130,27 @@ Mimari ve kararlar: `docs/superpowers/specs/2026-08-04-stash-clipboard-design.md
 
 Sürümden önce çalıştırılacak elle QA listesi: `docs/manual-qa.md`.
 
+## Ses kredileri
+
+Kopyalama ve yapıştırma geri bildirim sesleri (`Sources/Stash/Resources/
+Sounds/copy.wav`, `paste.wav`) macOS sistem sesi değildir — Freesound'dan
+alınmış, aşağıdaki lisansla kullanılan bir kayıttır. **Bu, kod için geçerli
+MIT lisansından ayrıdır ve MIT değildir**; kaynak ve şart aşağıda:
+
+- Kaynak: "soft sound plastic button click", orginaljun —
+  https://freesound.org/s/150382/
+- Lisans: Creative Commons Attribution 3.0 Unported (CC-BY 3.0) —
+  https://creativecommons.org/licenses/by/3.0/
+- `copy.wav`: kaynağın kırpılmış, seviyesi ayarlanmış hali.
+- `paste.wav`: aynı kaydın **türevi** (perdesi kaydırılmış), ardından
+  kırpılmış ve seviyesi ayarlanmış — CC-BY 3.0 türevlere de izin verir,
+  değişiklik yapıldığı bu şekilde belirtilir.
+
+Aynı bilgi, dosyaların yanında da duruyor:
+`Sources/Stash/Resources/Sounds/CREDITS.txt` — klasör repodan ayrı
+kopyalanırsa lisans şartı da onunla gitsin diye.
+
 ## Lisans
 
-MIT
+Kod: MIT. Yukarıdaki iki ses dosyası hariç — onlar CC-BY 3.0 ("Ses
+kredileri" bölümüne bakın).

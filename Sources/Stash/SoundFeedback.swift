@@ -19,40 +19,81 @@ protocol SoundPlaying {
 /// açık kalan bir menü çubuğu uygulamasında kullanıcı ekrana bakmadan
 /// ikisini ayırt edemez — sesin bütün amacı bu.
 ///
-/// Seçim: macOS'un yerleşik seslerinin en kısaları arasından, birbirinden
-/// tonca ayrışan ama ikisi de günde yüzlerce kez çalınca yorucu olmayan iki
-/// tanesi. Glass/Hero/Sosumi/Submarine gibi daha uzun ya da "bildirim"
-/// hissi veren sesler bilerek elendi — bir kopyalama/yapıştırma bir olay
-/// değil, arka plan geri bildirimi.
-///   - `captured`: "Tink" — kısa, tiz, metalik bir tık. Panodan yeni bir
-///     şeyin Stash'e girdiğini (kaydedildiğini) işaretler.
-///   - `pasted`: "Pop" — kısa, yumuşak, alçak bir pat. Seçili bir kartın
-///     öndeki uygulamaya GERÇEKTEN teslim edildiğini işaretler; `Tink`ten
-///     hem perde hem doku olarak yeterince farklı ki ikisi arka arkaya
+/// Sahibi macOS'un yerleşik seslerini (eski `SystemSoundPlayer`, "Tink"/
+/// "Pop") sert bulup reddetti; kendi seçtiği iki kısa klip kullanılıyor
+/// (bkz. `Resources/Sounds/CREDITS.txt` — kaynak, lisans CC-BY 3.0).
+///   - `captured`: `copy.wav` — panodan yeni bir şeyin Stash'e girdiğini
+///     (kaydedildiğini) işaretler.
+///   - `pasted`: `paste.wav` — aynı kaydın perde kaydırılmış türevi; seçili
+///     bir kartın öndeki uygulamaya GERÇEKTEN teslim edildiğini işaretler,
+///     `copy.wav`den perde olarak yeterince farklı ki ikisi arka arkaya
 ///     duyulunca da karışmaz.
 enum FeedbackSound: Equatable {
     case captured
     case pasted
 
-    var systemSoundName: NSSound.Name {
+    /// Paket kaynağındaki dosya adı (uzantısız) — `Resources/Sounds/`de
+    /// hem repoda hem kurulu `.app`in `Contents/Resources/Sounds/`inde
+    /// aynı adla duruyor (bkz. `scripts/bundle.sh`).
+    var resourceFileName: String {
         switch self {
-        case .captured: return "Tink"
-        case .pasted: return "Pop"
+        case .captured: return "copy"
+        case .pasted: return "paste"
         }
     }
 }
 
-/// `NSSound(named:).play()` sistemin ses sunucusuna kısa bir mesaj yollayıp
-/// hemen döner — senkron beklemiyor, bu yüzden ne 0,5 saniyelik yoklama
-/// döngüsünü ne de sentetik ⌘V yolunu bloklar (görev kuralı 6).
+/// Sahibinin seçtiği iki ses, paket kaynağından okunuyor — macOS sistem
+/// seslerinden değil (bkz. `FeedbackSound` gerekçesi ve README'deki kredi
+/// bölümü). Eksik ya da bozuk dosya = sessizlik: asla çökme, asla reddedilen
+/// bir sistem sesine geri dönüş (görev kuralı 2).
 ///
-/// Her çalışta YENİ bir `NSSound` örneği oluşturuyoruz: tek bir örneği
-/// paylaşıp üst üste tetiklemek, hızlı art arda kopyalarda (`NSSound`
-/// aynı örnek üzerinde yeni bir `play()` önceki çalmayı kesiyor) sesin
-/// yarıda kesilmesine yol açar — kullanıcıya "bir şey ters gitti" hissi
-/// verir, oysa sadece hızlı kopyalamıştır.
-struct SystemSoundPlayer: SoundPlaying {
+/// Sesler `Bundle.main.resourceURL`den okunur, `Bundle.module`den değil:
+/// bu uygulama gerçek bir Xcode/SwiftPM kaynak hedefi değil, `scripts/
+/// bundle.sh`nin elle dikişlediği bir `.app` — tıpkı `AppIcon.icns`nin
+/// Info.plist üzerinden `Contents/Resources`te aranması gibi, sesler de
+/// aynı klasörde duruyor çünkü `bundle.sh` onları oraya kopyalıyor.
+/// Paketlenmemiş bir `swift run` bu düzeni sağlamaz — `Bundle.main` o zaman
+/// `.build` altını gösterir, dosyalar bulunamaz ve player sessiz kalır,
+/// çökmez; bu durum test/geliştirme akışında zaten hedeflenen davranış.
+///
+/// İki ses de HER `play()` çağrısında değil, KURULUŞTA bir kez diskten
+/// okunup `NSSound` olarak önbelleğe alınır (görev kuralı: "load once and
+/// reuse... fires hundreds of times a day" — günde yüzlerce kez aynı dosyayı
+/// yeniden okumak israf). Her çalışta önbellekteki örneği doğrudan çalmak
+/// yerine `NSCopying` ile ucuz bir kopyasını çalıyoruz: `NSSound` aynı
+/// örnek üzerinde üst üste `play()` çağrılırsa önceki çalmayı keser (bkz.
+/// eski `SystemSoundPlayer` gerekçesi, hâlâ geçerli) — `copy()` altındaki
+/// ses verisini yeniden okumadan bağımsız, kesilmeyen bir çalma başlatır.
+@MainActor
+final class BundledSoundPlayer: SoundPlaying {
+    private let captured: NSSound?
+    private let pasted: NSSound?
+
+    // Testler gerçek `.play()`i hiç çağırmıyor (bkz. dosya başı gerekçe),
+    // ama gerçek paket dosyalarının çökmeden yüklendiğini doğrulamak için
+    // bu iki bayrağa bakıyor — bkz. `BundledSoundPlayerTests`.
+    var isCapturedLoaded: Bool { captured != nil }
+    var isPastedLoaded: Bool { pasted != nil }
+
+    init(resourceDirectory: URL? = Bundle.main.resourceURL?.appendingPathComponent("Sounds", isDirectory: true)) {
+        captured = Self.load(.captured, in: resourceDirectory)
+        pasted = Self.load(.pasted, in: resourceDirectory)
+    }
+
+    private static func load(_ sound: FeedbackSound, in directory: URL?) -> NSSound? {
+        guard let directory else { return nil }
+        let url = directory
+            .appendingPathComponent(sound.resourceFileName)
+            .appendingPathExtension("wav")
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        // `byReference: false`: veriyi burada, kuruluşta belleğe okur — asıl
+        // "bir kez oku" adımı bu; sonraki her `play()` yalnızca `copy()`.
+        return NSSound(contentsOf: url, byReference: false)
+    }
+
     func play(_ sound: FeedbackSound) {
-        NSSound(named: sound.systemSoundName)?.play()
+        let cached = sound == .captured ? captured : pasted
+        (cached?.copy() as? NSSound)?.play()
     }
 }
