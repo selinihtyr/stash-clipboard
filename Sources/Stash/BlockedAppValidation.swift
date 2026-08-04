@@ -34,18 +34,18 @@ enum BlockedBundleIDValidation: Equatable {
 func validateBlockedBundleID(_ input: String, existing: Set<String>) -> BlockedBundleIDValidation {
     let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else {
-        return .invalid(reason: "Paket kimliği boş olamaz.")
+        return .invalid(reason: "Bundle ID can't be empty.")
     }
     // Alt çizgi kurallı bir reverse-DNS bileşeni değildir ama gerçek
     // uygulamalar kullanır (ör. "com.my_company.app"); onu reddetmek
     // kullanıcının elindeki gerçek bir bundle ID'yi geçersiz sayardı.
     let pattern = #"^[A-Za-z0-9_]+(\.[A-Za-z0-9_-]+)+$"#
     guard trimmed.range(of: pattern, options: .regularExpression) != nil else {
-        return .invalid(reason: "Ters etki alanı biçiminde olmalı (ör. com.apple.Notes).")
+        return .invalid(reason: "Must be reverse-DNS format (e.g. com.apple.Notes).")
     }
     let normalized = trimmed.lowercased()
     guard !existing.contains(where: { $0.lowercased() == normalized }) else {
-        return .invalid(reason: "Bu paket kimliği zaten listede.")
+        return .invalid(reason: "This bundle ID is already on the list.")
     }
     return .valid(normalized)
 }

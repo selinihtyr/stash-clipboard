@@ -19,10 +19,10 @@
        özelleştirir; anahtar olmadan da özellik çalışır, sadece istem daha
        genel bir metin gösterir. -->
   <key>NSDesktopFolderUsageDescription</key>
-  <string>Yeni ekran görüntülerini pano geçmişine eklemek için ekran görüntüsü klasörünü okur. Yalnızca ayarlardan bu özelliği açtığında kullanılır.</string>
+  <string>Reads the screenshot folder to add new screenshots to your clipboard history. Only used when you turn this on in Settings.</string>
   <key>NSDocumentsFolderUsageDescription</key>
-  <string>Ekran görüntüsü klasörün Belgeler altına ayarlıysa, yeni ekran görüntülerini pano geçmişine eklemek için orayı okur. Yalnızca ayarlardan bu özelliği açtığında kullanılır.</string>
+  <string>If your screenshot folder is set to Documents, reads it to add new screenshots to your clipboard history. Only used when you turn this on in Settings.</string>
   <key>NSDownloadsFolderUsageDescription</key>
-  <string>Ekran görüntüsü klasörün İndirilenler altına ayarlıysa, yeni ekran görüntülerini pano geçmişine eklemek için orayı okur. Yalnızca ayarlardan bu özelliği açtığında kullanılır.</string>
+  <string>If your screenshot folder is set to Downloads, reads it to add new screenshots to your clipboard history. Only used when you turn this on in Settings.</string>
 </dict>
 </plist>

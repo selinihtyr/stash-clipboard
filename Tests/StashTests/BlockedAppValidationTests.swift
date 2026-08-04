@@ -9,7 +9,7 @@ import Testing
 
 @Test func blankBundleIDIsRejectedWithAVisibleReason() {
     #expect(validateBlockedBundleID("   ", existing: [])
-        == .invalid(reason: "Paket kimliği boş olamaz."))
+        == .invalid(reason: "Bundle ID can't be empty."))
 }
 
 @Test func aPlausibleReverseDNSBundleIDIsAccepted() {

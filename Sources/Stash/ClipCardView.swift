@@ -36,10 +36,10 @@ struct ClipCardView: View {
 
     private var typeLabel: String {
         switch clip.kind {
-        case .text: return "METİN"
-        case .image: return "GÖRSEL"
-        case .link: return "BAĞLANTI"
-        case .file: return "DOSYA"
+        case .text: return "TEXT"
+        case .image: return "IMAGE"
+        case .link: return "LINK"
+        case .file: return "FILE"
         }
     }
 
@@ -62,7 +62,7 @@ struct ClipCardView: View {
                     .foregroundStyle(Theme.label)
                 Spacer()
                 if isSensitive, !revealed {
-                    Text("çift tıkla, göster")
+                    Text("double-click to reveal")
                         .font(.system(size: 9)).foregroundStyle(Theme.label.opacity(0.7))
                 }
                 // Kontroller görünürken bu ikonun yerini oradaki sabitle
@@ -107,18 +107,18 @@ struct ClipCardView: View {
             if controlsVisible { hoverControls.padding(8) }
         }
         .onHover { hovering in isHovering = hovering }
-        .alert("Yeni raf", isPresented: $showingNewShelfPrompt) {
-            TextField("Raf adı", text: $newShelfName)
-            Button("Oluştur") { createShelfAndMove() }
-            Button("Vazgeç", role: .cancel) { newShelfName = "" }
+        .alert("New Shelf", isPresented: $showingNewShelfPrompt) {
+            TextField("Shelf name", text: $newShelfName)
+            Button("Create") { createShelfAndMove() }
+            Button("Cancel", role: .cancel) { newShelfName = "" }
         } message: {
-            Text("Rafa bir ad ver.")
+            Text("Give the shelf a name.")
         }
-        .alert("Raf oluşturulamadı", isPresented: Binding(
+        .alert("Couldn't create shelf", isPresented: Binding(
             get: { shelfCreationError != nil },
             set: { if !$0 { shelfCreationError = nil } }
         )) {
-            Button("Tamam", role: .cancel) { }
+            Button("OK", role: .cancel) { }
         } message: {
             Text(shelfCreationError ?? "")
         }
@@ -139,25 +139,25 @@ struct ClipCardView: View {
                     .frame(width: 20, height: 20)
             }
             .buttonStyle(.plain)
-            .help(clip.pinned ? "Sabitlemeyi kaldır (⌃P)" : "Sabitle (⌃P)")
+            .help(clip.pinned ? "Unpin (⌃P)" : "Pin (⌃P)")
 
             // Silme burada, çıplak bir çöp kutusu ikonu olarak DEĞİL: 162pt
             // genişlikte iki ikon zaten sıkışık dururdu, ve yıkıcı eylemi bir
             // kademe gömmek bilinçli bir seçim (brief'in gerekçesi).
             Menu {
-                Menu("Rafa taşı") {
+                Menu("Move to shelf") {
                     ForEach(model.shelves) { shelf in
                         Button(shelf.name) {
                             try? model.moveToShelf(id: clip.id, shelfID: shelf.id)
                         }
                     }
                     if !model.shelves.isEmpty { Divider() }
-                    Button("Yeni raf oluştur…") {
+                    Button("New Shelf…") {
                         newShelfName = ""
                         showingNewShelfPrompt = true
                     }
                 }
-                Button("Sil", role: .destructive) {
+                Button("Delete", role: .destructive) {
                     try? model.delete(id: clip.id)
                 }
             } label: {
@@ -169,7 +169,7 @@ struct ClipCardView: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Rafa taşı (⌃S) · Sil (⌘⌫)")
+            .help("Move to shelf (⌃S) · Delete (⌘⌫)")
         }
         .padding(4)
         .background(Capsule().fill(Theme.cardFillSelected))
@@ -206,7 +206,7 @@ struct ClipCardView: View {
                 preview(image)
             } else {
                 // Budanmış veya kayıp görsel: kart yalan söylemesin.
-                Text("görsel artık saklanmıyor")
+                Text("image no longer kept")
                     .font(.system(size: 11)).foregroundStyle(Theme.label)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }

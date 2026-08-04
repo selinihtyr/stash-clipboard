@@ -63,8 +63,8 @@ struct StripView: View {
             Spacer()
             if model.visible.isEmpty {
                 Text(model.query.isEmpty
-                     ? "Henüz bir şey kopyalamadın."
-                     : "Eşleşen kart yok.")
+                     ? "Nothing copied yet."
+                     : "No matching cards.")
                     .font(.system(size: 12)).foregroundStyle(Theme.label)
             }
         }
@@ -83,7 +83,7 @@ struct StripView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(model.query.isEmpty ? Theme.label : Theme.accent)
             if model.query.isEmpty {
-                Text("yazmaya başla, arasın")
+                Text("just start typing to search")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.label)
             } else {
@@ -118,9 +118,9 @@ struct StripView: View {
     private var tabs: [TabEntry] {
         // İlk üçü sabit ve silinemez: raf değiller, kayıt üzerindeki alanlara
         // bakan süzgeçler.
-        [TabEntry(title: "Tümü", tab: .all),
-         TabEntry(title: "Sabitlenen", tab: .pinned),
-         TabEntry(title: "Görseller", tab: .images)]
+        [TabEntry(title: "All", tab: .all),
+         TabEntry(title: "Pinned", tab: .pinned),
+         TabEntry(title: "Images", tab: .images)]
         + model.shelves.map { TabEntry(title: $0.name, tab: .shelf($0.id)) }
     }
 }

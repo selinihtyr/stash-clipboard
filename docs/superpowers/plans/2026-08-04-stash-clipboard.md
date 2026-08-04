@@ -3322,7 +3322,7 @@ Expected: FAIL — `value of type 'ClipStore' has no member 'recoveredFromCorrup
             // kurtarma denemesi bize değil ona ait.
             sqlite3_close(db); db = nil
             let backup = directory.appendingPathComponent(
-                "stash-bozuk-\(Int(Date().timeIntervalSince1970)).sqlite")
+                "stash-corrupt-\(Int(Date().timeIntervalSince1970)).sqlite")
             try? FileManager.default.moveItem(
                 at: directory.appendingPathComponent("stash.sqlite"), to: backup)
             recoveredFromCorruption = backup

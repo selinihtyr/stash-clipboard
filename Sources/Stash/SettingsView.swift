@@ -76,7 +76,7 @@ struct SettingsView: View {
         get { settingsStore.settings }
         nonmutating set { settingsStore.settings = newValue }
     }
-    @State private var diskText = "hesaplanıyor…"
+    @State private var diskText = "calculating…"
     @State private var shelves: [Shelf] = []
     @State private var newShelfName = ""
     @State private var newBlockedBundleID = ""
@@ -98,8 +98,8 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Genel") {
-                Toggle("Açılışta başlat", isOn: Binding(
+            Section("General") {
+                Toggle("Launch at login", isOn: Binding(
                     get: { launchAtLoginEnabled },
                     set: { newValue in
                         do {
@@ -111,25 +111,25 @@ struct SettingsView: View {
                             // Anahtarı tıklanan değere göre bırakmak
                             // kullanıcıya yalan söyler; gerçek durumu aşağıda
                             // yeniden okuyoruz.
-                            errorAlert = AlertMessage(title: "Açılışta başlatma ayarlanamadı",
+                            errorAlert = AlertMessage(title: "Couldn't set launch at login",
                                                       detail: "\(error)")
                         }
                         launchAtLoginEnabled = LoginItem.isEnabled
                     }))
-                Text("Sistem Ayarları'ndaki Giriş Öğeleri listesinde de görünür ve oradan kapatılabilir.")
+                Text("Also appears in the Login Items list in System Settings, where it can be turned off too.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Ses") {
-                Toggle("Kopyalama ve yapıştırmada ses çal", isOn: Binding(
+            Section("Sound") {
+                Toggle("Play a sound on copy and paste", isOn: Binding(
                     get: { settings.soundsEnabled },
                     set: { newValue in
                         settings.soundsEnabled = newValue
                         onChange(settings)
                     }))
-                Text("Panodan yeni bir şey kaydedilince ve bir kart öndeki uygulamaya yapıştırılınca, birbirinden farklı iki kısa ses duyulur.")
+                Text("You'll hear two distinct short sounds: one when something new is saved from the clipboard, another when a card is pasted into the frontmost app.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Ekran görüntüleri") {
+            Section("Screenshots") {
                 // `onChange` (AppDelegate.openSettings kapanışı) senkron
                 // çalışır: izin ilk kez BURADA istenir. Reddedilirse
                 // `AppDelegate` `settingsStore.settings`i (ayrı bir `@State`
@@ -138,28 +138,29 @@ struct SettingsView: View {
                 // bunu kendiliğinden görür, "Açılışta başlat"ın `@State`
                 // anlık görüntüsünün aksine burada elle yeniden okumaya
                 // gerek yok (görev kuralı: "@State anlık görüntüsü YOK").
-                Toggle("Ekran görüntüsü klasörünü izle", isOn: Binding(
+                Toggle("Watch the screenshot folder", isOn: Binding(
                     get: { settings.screenshotWatchEnabled },
                     set: { newValue in
                         settings.screenshotWatchEnabled = newValue
                         onChange(settings)
                     }))
                 Text("""
-                    ⌘⇧4 gibi kısayollar ekran görüntüsünü panoya hiç \
-                    uğratmadan doğrudan diske yazar; bu anahtar açıkken Stash \
-                    o klasörü de izleyip yeni ekran görüntülerini panodan \
-                    kopyalanmış gibi geçmişe ekler. Yalnızca gerçek ekran \
-                    görüntüleri alınır, klasördeki başka dosyalara \
-                    dokunulmaz. Klasöre erişim izni gerekir; izin \
-                    reddedilirse anahtar kendiliğinden kapanır.
+                    Shortcuts like ⌘⇧4 write the screenshot straight to disk, \
+                    never touching the clipboard; with this on, Stash also \
+                    watches that folder and adds new screenshots to your \
+                    history as if they'd been copied. Only actual screenshots \
+                    are picked up — other files in the folder are left alone. \
+                    This reads a folder, not the clipboard, and needs folder \
+                    access permission; if it's denied, the toggle turns \
+                    itself back off.
                     """)
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Kısayol") {
+            Section("Shortcut") {
                 HStack {
-                    LabeledContent("Şeridi aç", value: settings.combo.displayString)
+                    LabeledContent("Open the strip", value: settings.combo.displayString)
                     Spacer()
-                    Button(recorder.isRecording ? "Dinleniyor…" : "Değiştir") {
+                    Button(recorder.isRecording ? "Listening…" : "Change") {
                         recorder.start { combo in
                             settings.combo = combo
                             onChange(settings)
@@ -168,77 +169,77 @@ struct SettingsView: View {
                     .disabled(recorder.isRecording)
                 }
                 Text(recorder.isRecording
-                     ? "Yeni kombinasyona bas. Vazgeçmek için Esc."
-                     : "Değiştirmek için “Değiştir”e bas, sonra yeni kombinasyona bas.")
+                     ? "Press the new combination. Esc to cancel."
+                     : "Press “Change”, then press the new combination.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Yapıştırma filtreleri") {
+            Section("Paste filters") {
                 ForEach(PasteFilter.allCases, id: \.self) { filter in
                     Toggle(title(for: filter), isOn: binding(for: filter))
                 }
-                Text("Filtreler ⌥↵ ile yapıştırırken listedeki sırayla uygulanır.")
+                Text("Filters apply in list order when pasting with ⌥↵.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Kaydedilmeyecek uygulamalar") {
+            Section("Apps not to save from") {
                 ForEach(Array(settings.blockedBundleIDs).sorted(), id: \.self) { id in
                     HStack {
                         Text(id).font(.system(.body, design: .monospaced))
                         Spacer()
-                        Button("Kaldır") {
+                        Button("Remove") {
                             settings.blockedBundleIDs.remove(id); onChange(settings)
                         }
                     }
                 }
                 HStack {
-                    TextField("Paket kimliği, ör. com.apple.Notes", text: $newBlockedBundleID)
-                    Button("Ekle", action: addBlockedBundleID)
+                    TextField("Bundle ID, e.g. com.apple.Notes", text: $newBlockedBundleID)
+                    Button("Add", action: addBlockedBundleID)
                 }
-                Text("Ters etki alanı biçiminde bir paket kimliği gerekir (ör. com.apple.Notes).")
+                Text("Needs a reverse-DNS bundle ID (e.g. com.apple.Notes).")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Raflar") {
+            Section("Shelves") {
                 ForEach(shelves) { shelf in
                     HStack {
                         Text(shelf.name)
                         Spacer()
-                        Button("Yeniden adlandır") { renameShelf(shelf) }
+                        Button("Rename") { renameShelf(shelf) }
                             .buttonStyle(.borderless)
-                        Button("Sil", role: .destructive) { confirmDeleteShelf(shelf) }
+                        Button("Delete", role: .destructive) { confirmDeleteShelf(shelf) }
                             .buttonStyle(.borderless)
                     }
                 }
                 HStack {
-                    TextField("Yeni raf", text: $newShelfName)
-                    Button("Ekle", action: createShelf)
+                    TextField("New shelf", text: $newShelfName)
+                    Button("Add", action: createShelf)
                 }
-                Text("Bir rafı silmek içindeki kartları silmez, kartlar sadece rafsız kalır.")
+                Text("Deleting a shelf doesn't delete the cards on it — they just become shelfless.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Geçmiş") {
+            Section("History") {
                 // "Görseller VE önizlemeler": imagesByteSize() thumbs/'u da
                 // sayıyor (bkz. ClipStore'daki gerekçe) — etiket yalnızca
                 // "Görsellerin" derse gösterilen sayıyla uyuşmaz, kullanıcı
                 // diskte gördüğünden daha büyük bir rakam görür.
-                LabeledContent("Görsel ve önizlemelerin kapladığı alan", value: diskText)
-                Button("Son bir saati temizle") {
+                LabeledContent("Space used by images and previews", value: diskText)
+                Button("Clear the last hour") {
                     try? store.deleteCreated(after: Date().addingTimeInterval(-3600))
                     refresh()
                 }
-                Button("Tümünü temizle", role: .destructive) {
+                Button("Clear everything", role: .destructive) {
                     try? store.deleteAll(); refresh()
                 }
-                Text("Sabitlediğin kartlar temizlemelerden etkilenmez.")
+                Text("Pinned cards survive clearing.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("İzin") {
-                LabeledContent("Erişilebilirlik",
-                               value: accessibilityTrusted ? "verildi" : "verilmedi")
+            Section("Permission") {
+                LabeledContent("Accessibility",
+                               value: accessibilityTrusted ? "granted" : "not granted")
                 if !accessibilityTrusted {
-                    Button("Sistem Ayarları'nı aç") {
+                    Button("Open System Settings") {
                         NSWorkspace.shared.open(URL(string:
                             "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
                     }
-                    Text("İzin olmadan Stash yapıştırmaz, sadece panoya kopyalar.")
+                    Text("Without this permission, Stash won't paste — it'll only copy to the clipboard.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -265,7 +266,7 @@ struct SettingsView: View {
         }
         .alert(item: $errorAlert) { message in
             Alert(title: Text(message.title), message: Text(message.detail),
-                 dismissButton: .default(Text("Tamam")))
+                 dismissButton: .default(Text("OK")))
         }
     }
 
@@ -297,7 +298,7 @@ struct SettingsView: View {
             // sessizce hiçbir şey olmamış gibi davranmak yerine görünür bir
             // hata, kullanıcıyı neyin ters gittiği konusunda karanlıkta
             // bırakmaz.
-            errorAlert = AlertMessage(title: "Uygulama eklenemedi", detail: reason)
+            errorAlert = AlertMessage(title: "Couldn't add app", detail: reason)
         }
     }
 
@@ -311,15 +312,15 @@ struct SettingsView: View {
             // davranmak kullanıcıyı neyin ters gittiği konusunda karanlıkta
             // bırakır — bkz. AppDelegate.createShelfAndMoveSelected'daki
             // aynı gerekçe.
-            errorAlert = AlertMessage(title: "Raf oluşturulamadı", detail: "\(error)")
+            errorAlert = AlertMessage(title: "Couldn't create shelf", detail: "\(error)")
         }
     }
 
     private func renameShelf(_ shelf: Shelf) {
         let alert = NSAlert()
-        alert.messageText = "Rafı yeniden adlandır"
-        alert.addButton(withTitle: "Kaydet")
-        alert.addButton(withTitle: "Vazgeç")
+        alert.messageText = "Rename shelf"
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
         field.stringValue = shelf.name
         alert.accessoryView = field
@@ -329,30 +330,30 @@ struct SettingsView: View {
             try store.renameShelf(shelf.id, to: field.stringValue)
             refreshShelves()
         } catch {
-            errorAlert = AlertMessage(title: "Yeniden adlandırılamadı", detail: "\(error)")
+            errorAlert = AlertMessage(title: "Couldn't rename", detail: "\(error)")
         }
     }
 
     private func confirmDeleteShelf(_ shelf: Shelf) {
         let alert = NSAlert()
-        alert.messageText = "“\(shelf.name)” rafını sil?"
-        alert.informativeText = "Raftaki kartlar silinmez, sadece rafsız kalır."
-        alert.addButton(withTitle: "Sil")
-        alert.addButton(withTitle: "Vazgeç")
+        alert.messageText = "Delete “\(shelf.name)”?"
+        alert.informativeText = "The cards on it aren't deleted — they just become shelfless."
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         do {
             try store.deleteShelf(shelf.id)
             refreshShelves()
         } catch {
-            errorAlert = AlertMessage(title: "Silinemedi", detail: "\(error)")
+            errorAlert = AlertMessage(title: "Couldn't delete", detail: "\(error)")
         }
     }
 
     private func title(for filter: PasteFilter) -> String {
         switch filter {
-        case .plainText: return "Düz metin olarak yapıştır"
-        case .collapseWhitespace: return "Fazla boşlukları temizle"
-        case .straightenQuotes: return "Akıllı tırnakları düzelt"
+        case .plainText: return "Paste as plain text"
+        case .collapseWhitespace: return "Collapse extra whitespace"
+        case .straightenQuotes: return "Straighten smart quotes"
         }
     }
 

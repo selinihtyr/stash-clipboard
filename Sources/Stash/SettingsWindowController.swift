@@ -43,7 +43,7 @@ final class SettingsWindowController: NSWindowController {
                      onChange: @escaping (StashCore.Settings) -> Void) {
         let window = SettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 620),
                                     styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = "Stash Ayarları"
+        window.title = "Stash Settings"
         window.isReleasedWhenClosed = false
         window.center()
         self.init(window: window)

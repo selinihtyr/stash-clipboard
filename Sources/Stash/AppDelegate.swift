@@ -62,10 +62,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // söylüyoruz — presentFatal'daki gibi terminate etmiyoruz.
             if let backup = store.recoveredFromCorruption {
                 let alert = NSAlert()
-                alert.messageText = "Geçmiş veritabanı okunamadı"
+                alert.messageText = "Couldn't read clipboard history"
                 alert.informativeText = """
-                    Stash boş bir geçmişle açıldı. Eski dosya silinmedi, \
-                    yanına kopyalandı: \(backup.lastPathComponent)
+                    Stash opened with an empty history. The old file wasn't \
+                    deleted — it was copied next to it: \(backup.lastPathComponent)
                     """
                 alert.runModal()
             }
@@ -105,7 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             coordinator.onError = { [weak self] _ in
                 self?.statusItem?.button?.image = NSImage(
                     systemSymbolName: "exclamationmark.triangle",
-                    accessibilityDescription: "Stash: disk hatası")
+                    accessibilityDescription: "Stash: disk error")
             }
             coordinator.start()
             self.coordinator = coordinator
@@ -161,22 +161,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func presentHotKeyAlert(for error: HotKeyError, combo: KeyCombo) {
         let alert = NSAlert()
-        alert.messageText = "Kısayol kaydedilemedi"
+        alert.messageText = "Couldn't register shortcut"
         switch error {
         case .alreadyTaken:
             // Gerçek çakışma: kullanıcı başka bir kısayol seçebilir.
             alert.informativeText = """
-                \(combo.displayString) başka bir uygulama tarafından kullanılıyor. \
-                Ayarlar'dan farklı bir kombinasyon seç.
+                \(combo.displayString) is already in use by another app. \
+                Pick a different combination from Settings.
                 """
         case .handlerInstallFailed(let status):
             // Çakışma değil, dahili bir kurulum hatası: kullanıcıyı başka bir
             // kombinasyon denemeye yönlendirmek yanlış teşhis olur — sebep
             // sistemde, kısayolda değil.
             alert.informativeText = """
-                Sistem olay işleyicisi kurulamadı (durum kodu \(status)). \
-                Bu bir kısayol çakışması değil, dahili bir hata. Uygulamayı yeniden \
-                başlatmayı deneyebilirsin.
+                The system event handler couldn't be installed (status \(status)). \
+                This isn't a shortcut conflict — it's an internal error. Try \
+                restarting the app.
                 """
         }
         alert.runModal()
@@ -184,15 +184,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
-        let openItem = menu.addItem(withTitle: "Stash'i aç", action: #selector(toggleStrip), keyEquivalent: "")
+        let openItem = menu.addItem(withTitle: "Open Stash", action: #selector(toggleStrip), keyEquivalent: "")
         openItem.target = self
         applyShortcut(settingsStore.settings.combo, to: openItem)
         openMenuItem = openItem
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Ayarlar…", action: #selector(openSettings), keyEquivalent: ",")
+        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
             .target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Çık", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
     }
 
@@ -241,11 +241,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     finalSettings.combo = previous
                     self.presentHotKeyAlert(for: reason, combo: previous)
                     let alert = NSAlert()
-                    alert.messageText = "Kısayol geri yüklenemedi"
+                    alert.messageText = "Couldn't restore shortcut"
                     alert.informativeText = """
-                        Ne \(attempted.displayString) ne de önceki \(previous.displayString) \
-                        kaydedilebildi. Stash şu an hiçbir kısayolla açılamıyor; \
-                        Ayarlar'dan farklı bir kombinasyon dene.
+                        Neither \(attempted.displayString) nor the previous \(previous.displayString) \
+                        could be registered. Stash currently has no working shortcut; \
+                        try a different combination from Settings.
                         """
                     alert.runModal()
                 }
@@ -317,13 +317,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsStore.settings = updated
         updated.save()
         let alert = NSAlert()
-        alert.messageText = "Ekran görüntüsü klasörüne erişilemedi"
+        alert.messageText = "Couldn't access the screenshot folder"
         alert.informativeText = """
-            Stash'in ekran görüntüsü klasörünü okuyabilmesi için izin gerekiyor. \
-            Sistem Ayarları'ndan izin verip anahtarı yeniden açabilirsin.
+            Stash needs permission to read the screenshot folder. Grant it in \
+            System Settings, then turn the toggle back on.
             """
-        alert.addButton(withTitle: "Sistem Ayarları'nı aç")
-        alert.addButton(withTitle: "Tamam")
+        alert.addButton(withTitle: "Open System Settings")
+        alert.addButton(withTitle: "OK")
         if alert.runModal() == .alertFirstButtonReturn {
             NSWorkspace.shared.open(URL(string:
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!)
@@ -435,9 +435,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// aksi halde "her zaman görsel diyor" iddiası bir gün yalan çıkar.
     private func presentNothingToPasteAlert() {
         let alert = NSAlert()
-        alert.messageText = "Bu kartta yapıştıracak bir şey yok"
-        alert.informativeText = "İçerik artık kullanılamıyor. Sil, ya da yeniden kopyala."
-        alert.addButton(withTitle: "Tamam")
+        alert.messageText = "Nothing to paste on this card"
+        alert.informativeText = "The content is no longer available. Delete it, or copy it again."
+        alert.addButton(withTitle: "OK")
         alert.runModal()
     }
 
@@ -460,13 +460,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Sessizce kopyalayıp bırakmıyoruz: kullanıcı ⌘V beklerken hiçbir şey
             // olmadığını görürse uygulamayı bozuk sanır.
             let alert = NSAlert()
-            alert.messageText = "Panoya kopyalandı"
+            alert.messageText = "Copied to clipboard"
             alert.informativeText = """
-                Doğrudan yapıştırma için Stash'in Erişilebilirlik izni gerekiyor. \
-                Şimdilik ⌘V ile yapıştırabilirsin.
+                Stash needs Accessibility permission to paste directly. \
+                For now, paste with ⌘V.
                 """
-            alert.addButton(withTitle: "İzin ver")
-            alert.addButton(withTitle: "Şimdi değil")
+            alert.addButton(withTitle: "Grant permission")
+            alert.addButton(withTitle: "Not now")
             if alert.runModal() == .alertFirstButtonReturn {
                 NSWorkspace.shared.open(URL(string:
                     "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
@@ -477,9 +477,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // teşhis olur — burada gösterilecek tek doğru şey içeriğin
             // panoda olduğu ve ⌘V ile yapıştırılabileceği.
             let alert = NSAlert()
-            alert.messageText = "Panoya kopyalandı"
-            alert.informativeText = "Otomatik yapıştırma bu sefer olmadı. İçerik panoda, ⌘V ile yapıştır."
-            alert.addButton(withTitle: "Tamam")
+            alert.messageText = "Copied to clipboard"
+            alert.informativeText = "Automatic paste didn't happen this time. The content is on the clipboard — paste it with ⌘V."
+            alert.addButton(withTitle: "OK")
             alert.runModal()
         }
     }
@@ -510,7 +510,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.representedObject = shelf.id
         }
         if !model.shelves.isEmpty { menu.addItem(.separator()) }
-        let newItem = menu.addItem(withTitle: "Yeni raf oluştur…",
+        let newItem = menu.addItem(withTitle: "New Shelf…",
                                    action: #selector(createShelfAndMoveSelected), keyEquivalent: "")
         newItem.target = self
         menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
@@ -524,10 +524,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func createShelfAndMoveSelected() {
         guard let model else { return }
         let alert = NSAlert()
-        alert.messageText = "Yeni raf"
-        alert.informativeText = "Rafa bir ad ver."
-        alert.addButton(withTitle: "Oluştur")
-        alert.addButton(withTitle: "Vazgeç")
+        alert.messageText = "New Shelf"
+        alert.informativeText = "Give the shelf a name."
+        alert.addButton(withTitle: "Create")
+        alert.addButton(withTitle: "Cancel")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
         alert.accessoryView = field
         alert.window.initialFirstResponder = field
@@ -540,7 +540,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // şey olmamış gibi davranmak kullanıcıyı neyin ters gittiği
             // konusunda karanlıkta bırakır.
             let errorAlert = NSAlert()
-            errorAlert.messageText = "Raf oluşturulamadı"
+            errorAlert.messageText = "Couldn't create shelf"
             errorAlert.informativeText = "\(error)"
             errorAlert.runModal()
         }
@@ -555,7 +555,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func presentFatal(_ error: Error) {
         let alert = NSAlert()
-        alert.messageText = "Stash başlatılamadı"
+        alert.messageText = "Stash couldn't start"
         alert.informativeText = "\(error)"
         alert.runModal()
         NSApp.terminate(nil)

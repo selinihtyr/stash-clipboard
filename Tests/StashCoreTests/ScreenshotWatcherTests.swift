@@ -84,7 +84,7 @@ private func makeFolder() throws -> URL {
     #expect(rows.count == 1)
     #expect(rows.first?.kind == .image)
     // Görev kuralı 5: kaynak `loginwindow` değil, uygulamanın kendi sesi.
-    #expect(rows.first?.sourceName == "Ekran görüntüsü")
+    #expect(rows.first?.sourceName == "Screenshot")
     let imagePath = try #require(rows.first?.imagePath)
     #expect(FileManager.default.fileExists(atPath: imagePath))
 }

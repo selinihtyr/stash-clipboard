@@ -215,7 +215,7 @@ public final class ScreenshotWatcher {
                 // Görev kuralı 5: bu yoldan gelen klipler `loginwindow` gibi
                 // anlamsız bir öndeki-uygulama adı değil, uygulamanın kendi
                 // sesiyle konuşan bir açıklama taşır.
-                sourceName: "Ekran görüntüsü")
+                sourceName: "Screenshot")
             onIngest?()
             onIngestSound?()
         } catch {

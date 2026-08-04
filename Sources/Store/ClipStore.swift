@@ -70,7 +70,7 @@ public final class ClipStore {
                 // AppDelegate bunu presentFatal ile gösterip sonlandırır —
                 // sessiz bir "boş açıldı" yalanından iyisi budur.
                 throw StoreError.openFailed(
-                    "Bozuk veritabanı (\(error)) kenara alınamadı: \(moveError)")
+                    "Couldn't move aside the corrupt database (\(error)): \(moveError)")
             }
             // WAL modu veritabanını üç dosyaya böler (.sqlite, -wal, -shm).
             // Ana dosyayı taşıyıp bunları yerinde bırakırsak taze açılan
@@ -99,10 +99,10 @@ public final class ClipStore {
     /// olduğunun önceden doğrulanmasına dayandırıyoruz — aynı saniyede iki
     /// kurtarma olsa da moveItem asla bir öncekinin üstüne yazmaz.
     private static func freeBackupURL(in directory: URL, timestamp: Int, fm: FileManager) -> URL {
-        var candidate = directory.appendingPathComponent("stash-bozuk-\(timestamp).sqlite")
+        var candidate = directory.appendingPathComponent("stash-corrupt-\(timestamp).sqlite")
         var attempt = 2
         while fm.fileExists(atPath: candidate.path) {
-            candidate = directory.appendingPathComponent("stash-bozuk-\(timestamp)-\(attempt).sqlite")
+            candidate = directory.appendingPathComponent("stash-corrupt-\(timestamp)-\(attempt).sqlite")
             attempt += 1
         }
         return candidate
@@ -118,7 +118,7 @@ public final class ClipStore {
         }
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_step(stmt) == SQLITE_ROW, column(stmt, 0) == "ok" else {
-            throw StoreError.queryFailed("quick_check bütünlük sorunu bildirdi")
+            throw StoreError.queryFailed("quick_check reported an integrity problem")
         }
     }
 
@@ -155,7 +155,7 @@ public final class ClipStore {
     private func exec(_ sql: String) throws {
         var err: UnsafeMutablePointer<CChar>?
         guard sqlite3_exec(db, sql, nil, nil, &err) == SQLITE_OK else {
-            let message = err.map { String(cString: $0) } ?? "bilinmeyen hata"
+            let message = err.map { String(cString: $0) } ?? "unknown error"
             sqlite3_free(err)
             throw StoreError.queryFailed(message)
         }
@@ -375,7 +375,7 @@ public final class ClipStore {
     /// interpolasyon yerine bağlı parametre kullanılıyor.
     public func createShelf(name: String) throws -> Shelf {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { throw StoreError.queryFailed("raf adı boş olamaz") }
+        guard !trimmed.isEmpty else { throw StoreError.queryFailed("shelf name can't be empty") }
         let shelf = Shelf(id: UUID(), name: trimmed)
         let sql = "INSERT INTO shelves (id, name, createdAt) VALUES (?, ?, ?);"
         var stmt: OpaquePointer?
@@ -410,7 +410,7 @@ public final class ClipStore {
 
     public func renameShelf(_ id: UUID, to name: String) throws {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { throw StoreError.queryFailed("raf adı boş olamaz") }
+        guard !trimmed.isEmpty else { throw StoreError.queryFailed("shelf name can't be empty") }
         let sql = "UPDATE shelves SET name = ? WHERE id = ?;"
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
