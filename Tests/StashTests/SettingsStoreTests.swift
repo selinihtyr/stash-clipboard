@@ -17,7 +17,7 @@ private let comboB = KeyCombo(keyCode: KeyCombo.keyCodeV, modifiers: KeyCombo.co
 @MainActor
 @Test func settingsSurfaceReadsBackThePreviousComboAfterARejectedChange() {
     let initial = StashCore.Settings(combo: comboA, activeFilters: [.plainText],
-                                     blockedBundleIDs: [], launchAtLogin: false)
+                                     blockedBundleIDs: [])
     let store = SettingsStore(initial)
 
     // Kullanıcı comboB'yi denedi, ama Carbon kaydı reddetti (ör. başka bir
@@ -42,7 +42,7 @@ private let comboB = KeyCombo(keyCode: KeyCombo.keyCodeV, modifiers: KeyCombo.co
     // Karşıt durum: başarılı bir değişiklik gerçekten yansımalı, "her zaman
     // eskiyi göster" gibi tembel bir düzeltmeyle yanlışlıkla donmamalı.
     let initial = StashCore.Settings(combo: comboA, activeFilters: [.plainText],
-                                     blockedBundleIDs: [], launchAtLogin: false)
+                                     blockedBundleIDs: [])
     let store = SettingsStore(initial)
 
     var proposed = initial

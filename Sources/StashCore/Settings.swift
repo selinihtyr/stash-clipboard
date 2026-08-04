@@ -6,14 +6,17 @@ public struct Settings: Codable, Sendable, Equatable {
     public var combo: KeyCombo
     public var activeFilters: [PasteFilter]
     public var blockedBundleIDs: Set<String>
-    public var launchAtLogin: Bool
 
+    // Açılışta başlatma burada YOK: o durumun tek doğruluk kaynağı
+    // `LoginItem` (yani `SMAppService.mainApp.status`) — macOS zaten kalıcı
+    // tutuyor. Burada ikinci bir kopya tutmak, ikisi birbirinden sapabilen
+    // (ör. kullanıcı Sistem Ayarları'ndan kapatırsa) iki doğruluk kaynağı
+    // yaratırdı. Bkz. Sources/StashCore/LoginItem.swift.
     public init(combo: KeyCombo, activeFilters: [PasteFilter],
-                blockedBundleIDs: Set<String>, launchAtLogin: Bool) {
+                blockedBundleIDs: Set<String>) {
         self.combo = combo
         self.activeFilters = activeFilters
         self.blockedBundleIDs = blockedBundleIDs
-        self.launchAtLogin = launchAtLogin
     }
 
     public static let defaults = Settings(
@@ -21,8 +24,7 @@ public struct Settings: Codable, Sendable, Equatable {
         activeFilters: [.plainText],
         // Şifre yöneticileri panoya iş birliği tipi koymayı unutabiliyor;
         // kara liste ikinci savunma hattı.
-        blockedBundleIDs: ["com.1password.1password", "com.apple.keychainaccess"],
-        launchAtLogin: false)
+        blockedBundleIDs: ["com.1password.1password", "com.apple.keychainaccess"])
 
     private static let key = "settings"
 

@@ -73,11 +73,37 @@ struct SettingsView: View {
     // gibi görünürdü (fix round 1, bulgu 3). @State + uygulama etkinleşince
     // yeniden okumak bunu çözüyor.
     @State private var accessibilityTrusted = AXIsProcessTrusted()
+    // `LoginItem.isEnabled` `Settings`e değil `SMAppService`e sorulur (bkz.
+    // Settings.swift'teki gerekçe); bu @State yalnızca SwiftUI'ye yeniden
+    // çizim tetiklemesi için bir yer — doğruluk kaynağı hâlâ SMAppService,
+    // her `refresh()`te oradan tazeleniyor.
+    @State private var launchAtLoginEnabled = LoginItem.isEnabled
 
     struct AlertMessage: Identifiable { let id = UUID(); let title: String; let detail: String }
 
     var body: some View {
         Form {
+            Section("Genel") {
+                Toggle("Açılışta başlat", isOn: Binding(
+                    get: { launchAtLoginEnabled },
+                    set: { newValue in
+                        do {
+                            try LoginItem.setEnabled(newValue)
+                        } catch {
+                            // Kaynaktan kurulan, ad-hoc imzalı bir uygulamada
+                            // SMAppService.register() sessizce başarısız
+                            // olabilir (bkz. README "Açılışta başlatma").
+                            // Anahtarı tıklanan değere göre bırakmak
+                            // kullanıcıya yalan söyler; gerçek durumu aşağıda
+                            // yeniden okuyoruz.
+                            errorAlert = AlertMessage(title: "Açılışta başlatma ayarlanamadı",
+                                                      detail: "\(error)")
+                        }
+                        launchAtLoginEnabled = LoginItem.isEnabled
+                    }))
+                Text("Sistem Ayarları'ndaki Giriş Öğeleri listesinde de görünür ve oradan kapatılabilir.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Kısayol") {
                 HStack {
                     LabeledContent("Şeridi aç", value: settings.combo.displayString)
@@ -177,6 +203,7 @@ struct SettingsView: View {
         let bytes = (try? store.imagesByteSize()) ?? 0
         diskText = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
         accessibilityTrusted = AXIsProcessTrusted()
+        launchAtLoginEnabled = LoginItem.isEnabled
     }
 
     private func refreshShelves() {
