@@ -37,8 +37,24 @@ public func stripCommand(keyCode: UInt16, characters: String?,
     }
     // Değiştiricisiz karakterler arama alanına gider; ⌘/⌃/⌥ ile basılanlar
     // komut olabilir, onları metin sanmak yanlış olur.
-    if mods.isEmpty || mods == [.shift], let char = characters?.first, !char.isNewline {
+    if mods.isEmpty || mods == [.shift], let char = characters?.first, isTypable(char) {
         return .type(char)
     }
     return nil
+}
+
+/// Bir tuşun arama metnine girmeye hakkı var mı.
+///
+/// Eşlenmemiş her tuşun `.type`'a düşmesi tek başına yeterli değildi: AppKit,
+/// ok ve fonksiyon tuşlarını Unicode özel kullanım alanındaki (U+F700…U+F8FF)
+/// karakterlerle bildirir. Yukarı/aşağı ok tuşları bu yüzden arama kutusuna
+/// görünmeyen çöp yazıyordu — kullanıcının gördüğü şey kutu içinde soru
+/// işaretiydi. Buradaki kural eşlemeyi tamamlamaktan daha dayanıklı: yeni bir
+/// tuş eşlenmeyi unutsa bile metne dönüşemez.
+func isTypable(_ char: Character) -> Bool {
+    for scalar in char.unicodeScalars {
+        if (0xF700...0xF8FF).contains(scalar.value) { return false }  // fonksiyon tuşları
+        if scalar.properties.generalCategory == .control { return false }
+    }
+    return !char.isNewline
 }

@@ -5,7 +5,7 @@ struct StripView: View {
     @ObservedObject var model: StripModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Theme.contentSpacing) {
             header
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -23,7 +23,7 @@ struct StripView: View {
                         }
                     }
                     .padding(.horizontal, 22)
-                    .padding(.bottom, 22)
+                    .padding(.bottom, Theme.stripBottomPadding)
                 }
                 .onChange(of: model.selectedIndex) { _, new in
                     guard model.visible.indices.contains(new) else { return }
@@ -69,7 +69,7 @@ struct StripView: View {
             }
         }
         .padding(.horizontal, 22)
-        .padding(.top, 17)
+        .padding(.top, Theme.headerTopPadding)
     }
 
     // Odağı buraya taşıyan gerçek bir NSTextField yok: yakalama klavye
@@ -105,7 +105,7 @@ struct StripView: View {
             }
         }
         .padding(.horizontal, 10)
-        .frame(height: 26)
+        .frame(height: Theme.headerHeight)
         // Genişlik sabit: boş/dolu arası geçişte şeridin geri kalanı
         // (sekmeler, boş durum metni) yer değiştirmesin diye.
         .frame(width: 210, alignment: .leading)

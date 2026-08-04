@@ -14,7 +14,9 @@ final class StripPanel: NSPanel {
     var onKey: ((NSEvent) -> Bool)?
     private var monitor: Any?
 
-    static let height: CGFloat = 300
+    /// Theme'den türetiliyor: sabit bir sayı, başlık büyüdüğünde seçili kartı
+    /// sessizce kırpıyordu.
+    static var height: CGFloat { Theme.stripHeight }
 
     init(contentView view: NSView) {
         super.init(contentRect: NSRect(x: 0, y: 0, width: 800, height: Self.height),

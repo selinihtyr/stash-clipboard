@@ -14,4 +14,23 @@ enum Theme {
     static let cardWidth: CGFloat = 162
     static let cardHeight: CGFloat = 200
     static let cardHeightSelected: CGFloat = 224
+
+    // Şeridin iç ölçüleri. StripView bunları birebir kullanıyor; burada tek
+    // yerde durmalarının sebebi aşağıdaki stripHeight.
+    static let headerHeight: CGFloat = 26
+    static let headerTopPadding: CGFloat = 17
+    static let contentSpacing: CGFloat = 14
+    static let stripBottomPadding: CGFloat = 22
+
+    /// Şerit yüksekliği TÜRETİLİR, sabit değil.
+    ///
+    /// Daha önce 300 yazıyordu ve tasarımla uyumluydu — ta ki başlığa arama
+    /// alanı eklenene kadar. Başlık 26px büyüdü, toplam 303'e çıktı ve seçili
+    /// kart panelin dışına taşıp kırpıldı; kimse fark etmedi çünkü sayı
+    /// bağımsızdı. Türetince başlık ya da kart ölçüsü değişse de şerit
+    /// kendini ayarlar.
+    static var stripHeight: CGFloat {
+        headerTopPadding + headerHeight + contentSpacing
+            + cardHeightSelected + stripBottomPadding
+    }
 }
