@@ -8,6 +8,16 @@ public struct CapturedClip: Sendable, Equatable {
     public let text: String?
     public let imageData: Data?
     public let contentHash: String
+    /// `true` yalnızca bu, `ClipCapture`in ömründeki İLK başarılı `poll()`
+    /// çağrısıysa (bkz. `poll` içindeki `lastChangeCount == nil` kontrolü).
+    /// Açılıştaki bu ilk yoklama, panoda o an ne duruyorsa onu yakalar —
+    /// kullanıcının az önce yaptığı bir kopyalama değil, uygulama önceden
+    /// kapalıyken oraya konmuş, muhtemelen günler önceki bir içerik. Bunu
+    /// ayırt etmenin tek amacı: bir ses geri bildirimi eklendiğinde (bkz.
+    /// `CaptureCoordinator.onCaptureSound`) bu satırın her açılışta anlamsız
+    /// bir çınlamaya dönüşmesini önlemek — `ClipCapture` sesin kendisini
+    /// hiç bilmiyor, sadece bu ayrımı taşıyor.
+    public let isFirstCapture: Bool
 }
 
 public struct CapturePolicy: Sendable {
@@ -69,6 +79,10 @@ public final class ClipCapture {
 
     public func poll(frontmostBundleID: String?) -> CapturedClip? {
         let count = pasteboard.changeCount
+        // `defer` çalışmadan ÖNCEKİ değeri yakalıyoruz: bu satırdan sonra
+        // `lastChangeCount` her zaman bir değere sahip olur, o yüzden
+        // "ilk mi" sorusunu yalnızca burada, henüz nil'ken sorabiliriz.
+        let isFirstCapture = lastChangeCount == nil
         defer { lastChangeCount = count }
         guard count != lastChangeCount else { return nil }
         guard Set(pasteboard.types).isDisjoint(with: Self.skipTypes) else { return nil }
@@ -85,7 +99,7 @@ public final class ClipCapture {
 
         if let data = pasteboard.imageData(), !data.isEmpty {
             return CapturedClip(kind: .image, text: nil, imageData: data,
-                                contentHash: Self.hash(.image, data))
+                                contentHash: Self.hash(.image, data), isFirstCapture: isFirstCapture)
         }
         // Web bağlantısı, dosya kontrolünden ÖNCE ve NSURL okuyucusu
         // üzerinden denetlenir: bu, tam URL metnini (sorgu+parça dahil)
@@ -97,18 +111,19 @@ public final class ClipCapture {
         if let link = pasteboard.webURLString(), !link.isEmpty,
            Self.prefersURL(link, overPlainText: pasteboard.string()) {
             return CapturedClip(kind: .link, text: link, imageData: nil,
-                                contentHash: Self.hash(.link, Data(link.utf8)))
+                                contentHash: Self.hash(.link, Data(link.utf8)), isFirstCapture: isFirstCapture)
         }
         if let paths = pasteboard.fileURLStrings(), !paths.isEmpty {
             let joined = paths.joined(separator: "\n")
             return CapturedClip(kind: .file, text: joined, imageData: nil,
-                                contentHash: Self.hash(.file, Data(joined.utf8)))
+                                contentHash: Self.hash(.file, Data(joined.utf8)), isFirstCapture: isFirstCapture)
         }
         guard let text = pasteboard.string(),
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let kind: CapturedKind = Self.isLink(text) ? .link : .text
         return CapturedClip(kind: kind, text: text,
-                            imageData: nil, contentHash: Self.hash(kind, Data(text.utf8)))
+                            imageData: nil, contentHash: Self.hash(kind, Data(text.utf8)),
+                            isFirstCapture: isFirstCapture)
     }
 
     static func isLink(_ text: String) -> Bool {

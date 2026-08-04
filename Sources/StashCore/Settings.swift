@@ -6,6 +6,11 @@ public struct Settings: Codable, Sendable, Equatable {
     public var combo: KeyCombo
     public var activeFilters: [PasteFilter]
     public var blockedBundleIDs: Set<String>
+    /// Yakalama ve yapıştırma sesleri (bkz. Stash hedefindeki
+    /// `SoundFeedbackController`). `Settings` bu ikisinin nasıl çaldığını
+    /// bilmiyor — yalnızca açık/kapalı anahtarı taşıyor, tıpkı
+    /// `activeFilters`in filtrelerin nasıl uygulandığını bilmemesi gibi.
+    public var soundsEnabled: Bool
 
     // Açılışta başlatma burada YOK: o durumun tek doğruluk kaynağı
     // `LoginItem` (yani `SMAppService.mainApp.status`) — macOS zaten kalıcı
@@ -13,10 +18,11 @@ public struct Settings: Codable, Sendable, Equatable {
     // (ör. kullanıcı Sistem Ayarları'ndan kapatırsa) iki doğruluk kaynağı
     // yaratırdı. Bkz. Sources/StashCore/LoginItem.swift.
     public init(combo: KeyCombo, activeFilters: [PasteFilter],
-                blockedBundleIDs: Set<String>) {
+                blockedBundleIDs: Set<String>, soundsEnabled: Bool = true) {
         self.combo = combo
         self.activeFilters = activeFilters
         self.blockedBundleIDs = blockedBundleIDs
+        self.soundsEnabled = soundsEnabled
     }
 
     public static let defaults = Settings(
@@ -24,7 +30,27 @@ public struct Settings: Codable, Sendable, Equatable {
         activeFilters: [.plainText],
         // Şifre yöneticileri panoya iş birliği tipi koymayı unutabiliyor;
         // kara liste ikinci savunma hattı.
-        blockedBundleIDs: ["com.1password.1password", "com.apple.keychainaccess"])
+        blockedBundleIDs: ["com.1password.1password", "com.apple.keychainaccess"],
+        soundsEnabled: true)
+
+    private enum CodingKeys: String, CodingKey {
+        case combo, activeFilters, blockedBundleIDs, soundsEnabled
+    }
+
+    // Elle yazılmış `init(from:)`: `soundsEnabled`den ÖNCE kaydedilmiş bir
+    // ayarlar blob'unda bu anahtar hiç yok. Sentezlenmiş decode bu satırda
+    // tüm decode'u başarısızlığa düşürürdü (`load()` sonra sessizce
+    // `.defaults`e düşer — sahibin kısayolu, filtreleri, kara listesi hiç
+    // sebepsiz sıfırlanırdı). `decodeIfPresent` eksik anahtarı AÇIK'a
+    // düşürüyor: sahip sesi zaten istedi, sessiz bir yükseltmenin onu
+    // kapatması yanlış olurdu (görev kuralı 5).
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        combo = try container.decode(KeyCombo.self, forKey: .combo)
+        activeFilters = try container.decode([PasteFilter].self, forKey: .activeFilters)
+        blockedBundleIDs = try container.decode(Set<String>.self, forKey: .blockedBundleIDs)
+        soundsEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundsEnabled) ?? true
+    }
 
     private static let key = "settings"
 

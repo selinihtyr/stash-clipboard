@@ -124,6 +124,24 @@ private func makeHarness() throws -> (CaptureCoordinator, ClipStore, PasteEngine
 // çağrılmadan ÖNCE) tetiklendiği için, aradaki gerçek kopyalama kendi
 // changeCount'unu suppressChangeCount'un işaretlediği tek değerin ÖTESİNE
 // taşıyor — bu yüzden yutulmuyor.
+// Görev kuralı 3 ("One action, one sound"): `onWrite` → `suppressChangeCount`
+// zinciri ses eklendikten sonra da geçerliliğini korumalı — bir yapıştırma
+// yalnızca yapıştırma sesini üretmeli, 0,5 saniye sonraki yoklamada kendi
+// kendini yakalayıp ikinci (yakalama) sesini ASLA tetiklememeli.
+@MainActor @Test func aSuppressedSelfCaptureNeverFiresTheCaptureSoundHook() throws {
+    let (coordinator, store, engine, shared) = try makeHarness()
+    shared.userCopy("ilk")
+    coordinator.tick()
+    #expect(try store.recent(limit: 10).count == 1)
+
+    var soundFired = false
+    coordinator.onCaptureSound = { soundFired = true }
+    engine.paste(text: "ilk", filters: [], restoreFocus: immediateFocusRestoration) { _ in }
+    coordinator.tick() // "0,5 saniye sonraki" yoklama: suppressChangeCount sayesinde atlanmalı
+    #expect(soundFired == false)
+    #expect(try store.recent(limit: 10).count == 1)
+}
+
 @MainActor @Test func aGenuineUserCopyDuringTheFocusRestorationGapIsStillCaptured() throws {
     let (coordinator, store, engine, shared) = try makeHarness()
     shared.userCopy("ilk")

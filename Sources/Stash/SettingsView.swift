@@ -119,6 +119,16 @@ struct SettingsView: View {
                 Text("Sistem Ayarları'ndaki Giriş Öğeleri listesinde de görünür ve oradan kapatılabilir.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Ses") {
+                Toggle("Kopyalama ve yapıştırmada ses çal", isOn: Binding(
+                    get: { settings.soundsEnabled },
+                    set: { newValue in
+                        settings.soundsEnabled = newValue
+                        onChange(settings)
+                    }))
+                Text("Panodan yeni bir şey kaydedilince ve bir kart öndeki uygulamaya yapıştırılınca, birbirinden farklı iki kısa ses duyulur.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Kısayol") {
                 HStack {
                     LabeledContent("Şeridi aç", value: settings.combo.displayString)
@@ -208,7 +218,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460, height: 620)
+        .frame(width: 460, height: 680)
         .onAppear(perform: refresh)
         .onDisappear { recorder.stop() }
         // Kullanıcı Sistem Ayarları'ndan izin verip ya da Giriş Öğeleri'nden

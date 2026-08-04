@@ -14,6 +14,15 @@ public final class CaptureCoordinator {
     private var timer: Timer?
     public var onError: ((Error) -> Void)?
     public var onCapture: (() -> Void)?
+    /// `onCapture`tan AYRI: `onCapture` her başarılı yakalamada (açılıştaki
+    /// ilk yakalama dahil) tetiklenmeli çünkü model listesini tazelemesi
+    /// gerekiyor — o kart gerçekten kaydedildi. Bir ses eklendiğinde ise
+    /// (bkz. Stash hedefindeki `SoundFeedbackController`) açılış yakalaması
+    /// SESSİZ kalmalı (görev kuralı 1); `CaptureCoordinator` sesin kendisini
+    /// hiç bilmiyor (bkz. `PasteEngine.onWrite`deki aynı ayrım gerekçesi),
+    /// sadece "bu, kullanıcının gerçekten az önce yaptığı bir kopyalama mı"
+    /// sorusunun cevabını `CapturedClip.isFirstCapture` üzerinden taşıyor.
+    public var onCaptureSound: (() -> Void)?
 
     // Bulgu 4 (Important): pruneImages() koşulsuz sweepOrphanFiles() +
     // imagesByteSize() çalıştırıyordu — dört dizin taraması + tam bir SQL
@@ -102,6 +111,7 @@ public final class CaptureCoordinator {
                 try store.pruneImages(highWater: 2_000_000_000, lowWater: 1_500_000_000)
             }
             onCapture?()
+            if !captured.isFirstCapture { onCaptureSound?() }
         } catch {
             // Disk hatası uygulamayı düşürmemeli: o kopya kaybolur, menü
             // çubuğu uyarır, yoklama devam eder.

@@ -30,6 +30,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var store: ClipStore?
     private var capture: ClipCapture?
     private var settingsController: SettingsWindowController?
+    // `lazy`: varsayılan değer `self.settingsStore`a bakıyor, bir stored
+    // property initializer'ı `self`e henüz erişemez — bkz. Swift'in
+    // property initialization sırası. `settingsStore` yukarıda zaten
+    // `self`e ihtiyaç duymadan kendi kendine kuruluyor, bu yüzden `lazy`
+    // ilk erişimde onu güvenle okuyabiliyor.
+    private lazy var soundFeedback = SoundFeedbackController(
+        settingsStore: settingsStore, player: SystemSoundPlayer())
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -84,6 +91,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             let coordinator = CaptureCoordinator(store: store, capture: capture)
             coordinator.onCapture = { [weak self] in try? self?.model?.reload() }
+            // `onCaptureSound`, açılıştaki ilk yakalamada ve atlanan
+            // (engellenen uygulama, concealed/transient tip) yakalamalarda
+            // hiç tetiklenmiyor — o ayrım `CaptureCoordinator` seviyesinde
+            // zaten yapılıyor (bkz. gerekçesi). Burada sadece anahtarı
+            // okuyup sesi çalıyoruz.
+            coordinator.onCaptureSound = { [weak self] in self?.soundFeedback.captured() }
             coordinator.onError = { [weak self] _ in
                 self?.statusItem?.button?.image = NSImage(
                     systemSymbolName: "exclamationmark.triangle",
@@ -362,6 +375,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ama yanıltıcı olurdu: sırayı garanti eden yerin burası olduğu izlenimi
     /// verirdi, oysa gerçek garanti restoreFocus kancasında.
     private func finishPaste(_ outcome: PasteOutcome) {
+        // Ses, gösterilecek uyarıdan BAĞIMSIZ karar veriliyor (bkz.
+        // `soundForPasteOutcome`): `.pastedIntoFrontmostApp` "yapıştırıldı"
+        // sesini, iki `copiedOnly` sonucu da (uyarı gösterseler de
+        // göstermeseler de) dürüstçe "kopyalandı" sesini çalar.
+        soundFeedback.pasted(outcome)
         switch outcome {
         case .pastedIntoFrontmostApp:
             return
