@@ -1,3 +1,4 @@
+import AppKit
 import Carbon.HIToolbox
 import Foundation
 
@@ -37,6 +38,33 @@ public struct KeyCombo: Codable, Equatable, Sendable {
         case kVK_ANSI_C: return "C"
         case kVK_Space: return "Space"
         default: return "#\(keyCode)"
+        }
+    }
+
+    /// Carbon değiştiricileri (bu `modifiers` alanının biçimi, çünkü Carbon
+    /// global kısayol kaydı için gerekiyor) AppKit'in `NSEvent.ModifierFlags`
+    /// ailesine çevirir. Menü öğesi kısayolları (`NSMenuItem.keyEquivalentModifierMask`)
+    /// AppKit tarafında yaşıyor; ikisi arasında ortak bir tip yok.
+    public var eventModifierFlags: NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if modifiers & Self.control != 0 { flags.insert(.control) }
+        if modifiers & Self.option != 0 { flags.insert(.option) }
+        if modifiers & Self.shift != 0 { flags.insert(.shift) }
+        if modifiers & Self.command != 0 { flags.insert(.command) }
+        return flags
+    }
+
+    /// `NSMenuItem.keyEquivalent` için küçük harfli, tek karakterlik temsil.
+    /// Yalnızca `characterName(for:)`in gerçek bir harf/rakam bildiği kodlar
+    /// için dolu döner (`displayString`teki "#42" gibi numara yedeklemeleri
+    /// hariç) — menüde "⌥⌘#42" gibi anlamsız bir kısayol göstermektense hiç
+    /// göstermemek, kullanıcıyı yanlış bir tuşa yönlendirmekten daha dürüst.
+    public var keyEquivalent: String? {
+        switch Int(keyCode) {
+        case kVK_ANSI_V: return "v"
+        case kVK_ANSI_C: return "c"
+        case kVK_Space: return " "
+        default: return nil
         }
     }
 }

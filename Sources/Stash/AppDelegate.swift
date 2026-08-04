@@ -9,6 +9,10 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
+    // Menü sadece launch'ta bir kez kuruluyor; kullanıcı Ayarlar'dan
+    // kombinasyonu değiştirince bu öğeyi elde tutmadan güncelleyecek bir yer
+    // yok — bkz. openSettings içindeki applyShortcut çağrısı.
+    private var openMenuItem: NSMenuItem?
     private var panel: StripPanel?
     private var hotKey = HotKeyCenter()
     private var coordinator: CaptureCoordinator?
@@ -146,14 +150,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Stash'i aç", action: #selector(toggleStrip), keyEquivalent: "")
-            .target = self
+        let openItem = menu.addItem(withTitle: "Stash'i aç", action: #selector(toggleStrip), keyEquivalent: "")
+        openItem.target = self
+        applyShortcut(settingsStore.settings.combo, to: openItem)
+        openMenuItem = openItem
         menu.addItem(.separator())
         menu.addItem(withTitle: "Ayarlar…", action: #selector(openSettings), keyEquivalent: ",")
             .target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Çık", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
+    }
+
+    /// Kısayolu menü öğesine native biçimde (sağa hizalı tuş kombinasyonu)
+    /// yazar. `combo.keyEquivalent` nil dönerse (bilinmeyen bir tuş kodu)
+    /// hiçbir kısayol göstermiyoruz — yanlış bir tuş göstermek, hiç
+    /// göstermemekten daha kötü (bkz. KeyCombo.keyEquivalent gerekçesi).
+    private func applyShortcut(_ combo: KeyCombo, to item: NSMenuItem) {
+        if let character = combo.keyEquivalent {
+            item.keyEquivalent = character
+            item.keyEquivalentModifierMask = combo.eventModifierFlags
+        } else {
+            item.keyEquivalent = ""
+            item.keyEquivalentModifierMask = []
+        }
     }
 
     /// Pencereyi tek bir kontrolcü üzerinden tutuyoruz: her açılışta yeni bir
@@ -202,6 +222,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // alınan kombinasyonu (varsa) otomatik gösterir — fix round 2'nin
                 // tek bulgusu buydu.
                 self.settingsStore.settings = finalSettings
+                // Menü launch'ta bir kez kuruldu; kombinasyon değiştiyse (ya
+                // da başarısız olup eskiye döndüyse) öğeyi burada elle
+                // güncellemezsek menü eski kısayolu göstermeyi sürdürür.
+                if let item = self.openMenuItem {
+                    self.applyShortcut(finalSettings.combo, to: item)
+                }
                 // Başarısız bir kombinasyonu diske yazmıyoruz: finalSettings.combo
                 // her zaman gerçekten kaydolmuş bir değer (yeni ya da eski) —
                 // aksi halde sonraki açılış aynı hatayı sessizce tekrar ederdi.
