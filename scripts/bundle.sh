@@ -24,6 +24,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_PATH/Stash" "$APP/Contents/MacOS/Stash"
 cp "$ROOT/Sources/Stash/Info.plist" "$APP/Contents/Info.plist"
+cp "$ROOT/Sources/Stash/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 # Ad-hoc imza: geliştirici sertifikası olmadan uygulamayı çalıştırılabilir
 # kılan tek yol bu. Ama TCC izni imzanın CDHash'ine bağlanır ve kaynak
