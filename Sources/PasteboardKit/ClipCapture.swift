@@ -64,6 +64,17 @@ public final class ClipCapture {
             return CapturedClip(kind: .image, text: nil, imageData: data,
                                 contentHash: Self.hash(.image, data))
         }
+        // Web bağlantısı, dosya kontrolünden ÖNCE ve NSURL okuyucusu
+        // üzerinden denetlenir: bu, tam URL metnini (sorgu+parça dahil)
+        // `pasteboard.string()`in ilgili tipi hiç yazmadığı uygulamalarda
+        // bile garantiler ve genel metin sezgisine (isLink) muhtaç bırakmaz
+        // (C1). fileURLStrings() artık yalnızca gerçek file:// URL'lerini
+        // döndürdüğü için (bkz. PasteboardReading), buradan geçen bir web
+        // bağlantısı asla file dalına düşmez.
+        if let link = pasteboard.webURLString(), !link.isEmpty {
+            return CapturedClip(kind: .link, text: link, imageData: nil,
+                                contentHash: Self.hash(.link, Data(link.utf8)))
+        }
         if let paths = pasteboard.fileURLStrings(), !paths.isEmpty {
             let joined = paths.joined(separator: "\n")
             return CapturedClip(kind: .file, text: joined, imageData: nil,

@@ -8,9 +8,11 @@ final class FakePasteboard: PasteboardReading, @unchecked Sendable {
     var text: String?
     var image: Data?
     var files: [String]?
+    var webURL: String?
     func string() -> String? { text }
     func imageData() -> Data? { image }
     func fileURLStrings() -> [String]? { files }
+    func webURLString() -> String? { webURL }
 
     func put(text: String, types: [String] = ["public.utf8-plain-text"]) {
         self.text = text; self.image = nil; self.files = nil
@@ -127,4 +129,21 @@ private func capture(_ pb: FakePasteboard, blocked: Set<String> = []) -> ClipCap
     #expect(fileClip?.kind == .file)
     #expect(textClip?.kind == .text)
     #expect(fileClip?.contentHash != textClip?.contentHash)
+}
+
+@MainActor @Test func webURLIsCheckedBeforeFileURLsSoALinkNeverFallsIntoTheFileBranch() {
+    // C1: eskiden fileURLStrings() (seçeneksiz NSURL okuyucusu) bir web
+    // bağlantısını da yakalayıp .path'e indirgiyordu ve bu kontrol
+    // string()'ten ÖNCE çalıştığı için asla .link dalına ulaşılmıyordu.
+    // Burada iki uç da doldurulmuş bir pano simüle ediliyor (gerçek
+    // pasteboard'da webURLString() dolu, fileURLStrings() artık boş
+    // dönerdi) ve webURLString'in kazandığını doğruluyoruz.
+    let pb = FakePasteboard()
+    pb.webURL = "https://example.com/articles/2026?ref=twitter#top"
+    pb.text = "https://example.com/articles/2026?ref=twitter#top"
+    pb.types = ["public.url", "public.utf8-plain-text"]
+    pb.changeCount += 1
+    let clip = capture(pb).poll(frontmostBundleID: nil)
+    #expect(clip?.kind == .link)
+    #expect(clip?.text == "https://example.com/articles/2026?ref=twitter#top")
 }
