@@ -126,6 +126,72 @@ private func makeRealPNG(width: Int = 900, height: Int = 600) -> Data {
     #expect(try #require(thumbSize) < (try #require(originalSize)))
 }
 
+// Bulgu 4 (Important): pruneImages() koşulsuz sweepOrphanFiles() +
+// imagesByteSize() çalıştırıyordu — dört dizin taraması + tam bir SQL
+// sorgusu, @MainActor'da, YAZI dahil her yakalamadan sonra. 3000 dosyada
+// bu ~46ms; kullanıcı yazarken bu maliyeti tekrar tekrar ödemenin anlamı
+// yok. CaptureCoordinator artık bunu aç başına bir kez ve sonra
+// `pruneInterval` kadar arayla çalıştırıyor — "bir öksüz sonunda 2 GB
+// beklemeden geri kazanılır" garantisi aralık kadar gecikmeyle sürüyor.
+
+@MainActor @Test func pruneImagesRunsOnTheFirstTickOfALaunchRegardlessOfSize() throws {
+    let (coordinator, store, pb) = try makeCoordinator()
+    let orphan = store.imagesDirectory.appendingPathComponent("orphan-\(UUID().uuidString).png")
+    try Data(repeating: 0xAB, count: 5_000).write(to: orphan)
+    try FileManager.default.setAttributes(
+        [.modificationDate: Date().addingTimeInterval(-60)], ofItemAtPath: orphan.path)
+
+    pb.putImage(Data([0x89, 0x50, 0x4E, 0x47, 0x01, 0x02, 0x03]))
+    coordinator.tick()
+
+    #expect(!FileManager.default.fileExists(atPath: orphan.path))
+}
+
+@MainActor @Test func pruneImagesIsThrottledSoASecondTickWithinTheIntervalDoesNothing() throws {
+    let (coordinator, store, pb) = try makeCoordinator()
+    pb.putImage(Data([0x89, 0x50, 0x4E, 0x47, 0x01, 0x02, 0x03]))
+    coordinator.tick() // Açılıştaki ilk tick — pruneAt zaten kaydedildi.
+
+    // İlk tick'ten SONRA oluşan bir öksüz: gerçek CaptureCoordinator.tick()
+    // hiçbir zaman öksüz dosya bırakmaz, ama sweepOrphanFiles genel bir
+    // mekanizma (bkz. Store'daki gerekçe) — burada onu doğrudan diske
+    // yazarak taklit ediyoruz.
+    let orphan = store.imagesDirectory.appendingPathComponent("orphan-\(UUID().uuidString).png")
+    try Data(repeating: 0xCD, count: 5_000).write(to: orphan)
+    try FileManager.default.setAttributes(
+        [.modificationDate: Date().addingTimeInterval(-60)], ofItemAtPath: orphan.path)
+
+    pb.putImage(Data([0x89, 0x50, 0x4E, 0x47, 0x01, 0x02, 0x04]))
+    coordinator.tick()
+
+    // Varsayılan aralık (60sn) içinde ikinci tick budamayı yinelememeli.
+    #expect(FileManager.default.fileExists(atPath: orphan.path))
+}
+
+@MainActor @Test func pruneImagesRunsAgainOnceTheThrottleIntervalHasElapsed() throws {
+    let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("stash-core-capture-\(UUID().uuidString)")
+    let store = try ClipStore(directory: dir)
+    let pb = FakeCapturePasteboard()
+    let capture = ClipCapture(pasteboard: pb, policy: CapturePolicy())
+    // Sıfır aralık: her tick "eşiği geçti" sayılır, throttle hep devrede
+    // değilmiş gibi davranır — ikinci tick'in de budadığını doğrulamak için.
+    let coordinator = CaptureCoordinator(store: store, capture: capture, pruneInterval: 0)
+
+    pb.putImage(Data([0x89, 0x50, 0x4E, 0x47, 0x01, 0x02, 0x03]))
+    coordinator.tick()
+
+    let orphan = store.imagesDirectory.appendingPathComponent("orphan-\(UUID().uuidString).png")
+    try Data(repeating: 0xCD, count: 5_000).write(to: orphan)
+    try FileManager.default.setAttributes(
+        [.modificationDate: Date().addingTimeInterval(-60)], ofItemAtPath: orphan.path)
+
+    pb.putImage(Data([0x89, 0x50, 0x4E, 0x47, 0x01, 0x02, 0x04]))
+    coordinator.tick()
+
+    #expect(!FileManager.default.fileExists(atPath: orphan.path))
+}
+
 @MainActor @Test func aCaptureWhoseThumbnailCannotBeWrittenStillStoresTheClipAndItsOriginal() throws {
     // Küçük resim türetilmiş bir dosya; bu klibin görsel verisi NSImage
     // tarafından hiç çözülemiyor (sahte başlık), yani üretim baştan

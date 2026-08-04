@@ -15,10 +15,26 @@ public final class CaptureCoordinator {
     public var onError: ((Error) -> Void)?
     public var onCapture: (() -> Void)?
 
-    public init(store: ClipStore, capture: ClipCapture, interval: TimeInterval = 0.5) {
+    // Bulgu 4 (Important): pruneImages() koşulsuz sweepOrphanFiles() +
+    // imagesByteSize() çalıştırıyordu — dört dizin taraması + tam bir SQL
+    // sorgusu, her yakalamadan sonra (metin dahil), @MainActor'da. Ölçüm:
+    // 3000 görsel+küçük resimde 46ms, süpürmenin kendisi 32ms — kullanıcı
+    // yazarken bu maliyeti saniyede iki kez (0,5sn yoklama) ödemenin
+    // anlamı yok. 60 saniyelik aralık: `pruneImages`in tek başına maliyeti
+    // (en kötü durumda ~46ms) bu pencereye yayılınca ihmal edilebilir
+    // kalırken (~%0,08), "bir öksüz sonunda 2 GB beklemeden geri kazanılır"
+    // vaadi en fazla 60 saniyelik bir gecikmeyle sürüyor — kullanıcının
+    // fark edeceği bir süre değil.
+    public static let defaultPruneInterval: TimeInterval = 60
+    private let pruneInterval: TimeInterval
+    private var lastPruneAt: Date?
+
+    public init(store: ClipStore, capture: ClipCapture, interval: TimeInterval = 0.5,
+                pruneInterval: TimeInterval = CaptureCoordinator.defaultPruneInterval) {
         self.store = store
         self.capture = capture
         self.interval = interval
+        self.pruneInterval = pruneInterval
     }
 
     public func start() {
@@ -76,7 +92,15 @@ public final class CaptureCoordinator {
                 pinned: false, shelfID: nil,
                 contentHash: captured.contentHash,
                 byteSize: captured.imageData?.count ?? (captured.text?.utf8.count ?? 0)))
-            try store.pruneImages(highWater: 2_000_000_000, lowWater: 1_500_000_000)
+            // `lastPruneAt == nil`: açılıştan beri hiç budanmadı — açılışta
+            // bir kez KOŞULSUZ çalıştır (bkz. sınıf üstündeki gerekçe).
+            // Sonrasında yalnızca aralık dolunca — ara ticklerde tamamen
+            // atlanır.
+            let now = Date()
+            if lastPruneAt == nil || now.timeIntervalSince(lastPruneAt!) >= pruneInterval {
+                lastPruneAt = now
+                try store.pruneImages(highWater: 2_000_000_000, lowWater: 1_500_000_000)
+            }
             onCapture?()
         } catch {
             // Disk hatası uygulamayı düşürmemeli: o kopya kaybolur, menü
