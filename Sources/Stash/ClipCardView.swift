@@ -22,6 +22,14 @@ struct ClipCardView: View {
     // her açılışta yeniden kurulduğundan burada da fazladan bir "sıfırla"
     // gerekmiyor.
     @State private var isHovering = false
+
+    /// Kontroller hover'a DEĞİL, "bu kartla ilgileniliyor mu"ya bağlı.
+    ///
+    /// Sadece hover'a bağlıyken klavyeyle gezen biri sabitle ve ⋯ düğmelerini
+    /// hiç göremiyordu — oysa bu düğmelerin var olma sebebi tam olarak
+    /// keşfedilebilirlikti. Ok tuşlarıyla seçilen kart da imlecin üstündeki
+    /// kart kadar "ilgilenilen" karttır.
+    private var controlsVisible: Bool { isHovering || isSelected }
     @State private var showingNewShelfPrompt = false
     @State private var newShelfName = ""
     @State private var shelfCreationError: String?
@@ -57,11 +65,11 @@ struct ClipCardView: View {
                     Text("çift tıkla, göster")
                         .font(.system(size: 9)).foregroundStyle(Theme.label.opacity(0.7))
                 }
-                // Hover'dayken bu ikonun yerini hoverControls'teki sabitle
+                // Kontroller görünürken bu ikonun yerini oradaki sabitle
                 // düğmesi alır — o düğme dolu/boş ikonuyla zaten aynı durumu
                 // anlatıyor (bkz. o değişkenin üstündeki not), ikisini aynı
                 // anda göstermek aynı bilgiyi iki kere basardı.
-                if clip.pinned, !isHovering {
+                if clip.pinned, !controlsVisible {
                     Image(systemName: "pin.fill").font(.system(size: 9))
                         .foregroundStyle(Theme.accent)
                 }
@@ -96,7 +104,7 @@ struct ClipCardView: View {
         // bu. onHover, hover'da mı olduğumuzu söyleyen tek gerçek kaynak;
         // .overlay içindeki `if` de ondan başka bir şeye bakmıyor.
         .overlay(alignment: .topTrailing) {
-            if isHovering { hoverControls.padding(8) }
+            if controlsVisible { hoverControls.padding(8) }
         }
         .onHover { hovering in isHovering = hovering }
         .alert("Yeni raf", isPresented: $showingNewShelfPrompt) {
