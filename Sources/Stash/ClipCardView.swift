@@ -201,13 +201,9 @@ struct ClipCardView: View {
             // resimler eklenmeden önce yakalanmış) orijinale dönmek zorunlu:
             // yoksa her eski klip bu düşer.
             if let path = clip.thumbPath, let image = NSImage(contentsOfFile: path) {
-                Image(nsImage: image).resizable().scaledToFill()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                preview(image)
             } else if let path = clip.imagePath, let image = NSImage(contentsOfFile: path) {
-                Image(nsImage: image).resizable().scaledToFill()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                preview(image)
             } else {
                 // Budanmış veya kayıp görsel: kart yalan söylemesin.
                 Text("görsel artık saklanmıyor")
@@ -222,4 +218,22 @@ struct ClipCardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
+
+    /// Görsel önizlemesi.
+    ///
+    /// `.clipped()` şart: `scaledToFill` görseli önerilen alandan BÜYÜK
+    /// hesaplar, `.frame(maxWidth:)` ise yalnızca üst sınır önerir, kırpmaz —
+    /// `.clipShape` de görünümün kendi (çoktan taşmış) sınırlarına uygulandığı
+    /// için taşmayı kesmez. Yatay bir görsel (ekran görüntüleri hep öyledir)
+    /// bu yüzden kartın dışına çıkıp yanındaki kartın üstüne biniyordu; dikey
+    /// görsellerde belli olmadığı için gözden kaçmıştı.
+    @ViewBuilder private func preview(_ image: NSImage) -> some View {
+        Image(nsImage: image)
+            .resizable()
+            .scaledToFill()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
 }
