@@ -192,6 +192,65 @@ public final class ClipStore {
         try query("SELECT * FROM clips ORDER BY createdAt DESC LIMIT \(limit)")
     }
 
+    /// Bir sekmenin (Tümü/Sabitlenen/Görseller/Raf) hangi satırlara
+    /// baktığını tanımlar. `StripModel.reload()` eskiden `recent(limit: 300)`
+    /// çekip tab'a göre BELLEKTE süzüyordu — bu, sabitlenmiş/rafa konmuş/
+    /// görsel bir klip 300 satırdan eskiyince ilgili sekmede görünmez
+    /// oluyordu (C2). Süzgeç artık SQL'in WHERE'ine taşındı, limit süzgeçten
+    /// SONRA uygulanıyor; her sekme kendi 300'ünü görür, birbirine karışmaz.
+    public enum ClipScope: Sendable, Equatable {
+        case all
+        case pinned
+        case kind(ClipKind)
+        case shelf(UUID)
+    }
+
+    /// `scope` ve isteğe bağlı arama terimini SQL'de birleştirir. Raf id'si
+    /// (kullanıcı girdisi değil ama) ve arama terimi (kesinlikle kullanıcı
+    /// girdisi) bağlı parametreyle geçiyor — `upsert`in üstündeki yorumun
+    /// anlattığı el yapımı kaçış hatasını burada yeniden üretmemek için.
+    public func clips(in scope: ClipScope, matching term: String? = nil, limit: Int) throws -> [Clip] {
+        var whereClauses: [String] = []
+        var params: [String] = []
+        switch scope {
+        case .all:
+            break
+        case .pinned:
+            whereClauses.append("pinned = 1")
+        case .kind(let kind):
+            // ClipKind.rawValue programda sabit bir küme (text/image/link/file),
+            // kullanıcı girdisi değil; yine de tutarlılık için bağlı parametre.
+            whereClauses.append("kind = ?")
+            params.append(kind.rawValue)
+        case .shelf(let id):
+            whereClauses.append("shelfID = ?")
+            params.append(id.uuidString)
+        }
+        if let term, !term.isEmpty {
+            let escaped = term
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "%", with: "\\%")
+                .replacingOccurrences(of: "_", with: "\\_")
+            whereClauses.append("text LIKE ? ESCAPE '\\'")
+            params.append("%\(escaped)%")
+        }
+        let whereSQL = whereClauses.isEmpty ? "" : "WHERE " + whereClauses.joined(separator: " AND ")
+        let sql = "SELECT * FROM clips \(whereSQL) ORDER BY createdAt DESC LIMIT \(limit)"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw StoreError.queryFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        for (index, param) in params.enumerated() {
+            bindText(stmt, Int32(index + 1), param)
+        }
+        var out: [Clip] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            out.append(rowToClip(stmt))
+        }
+        return out
+    }
+
     func query(_ sql: String) throws -> [Clip] {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {

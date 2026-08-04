@@ -134,6 +134,44 @@ private func makeModel(_ texts: [String]) throws -> (StripModel, ClipStore, Reco
     #expect(model.visible.map(\.text) == ["iki", "bir"])
 }
 
+@MainActor @Test func pinnedShelfAndImageTabsStillFindTheirCardsPastThePageSize() throws {
+    // C2: reload() eskiden `recent(limit: 300)` çekip tab'a göre bellekte
+    // süzüyordu. 300'den FAZLA daha yeni ilgisiz klip eklendiğinde sabit/
+    // rafa konmuş/görsel klip artık en yeni 300'ün dışında kalıyor ve ilgili
+    // sekme sonsuza dek boş görünüyordu — kullanıcı bir şeyi sabitler,
+    // günler sonra Sabitlenen sekmesi boştur.
+    let (model, store, _) = try makeModel(["bir", "iki"])
+    let pinnedID = try #require(model.visible.first { $0.text == "bir" }?.id)
+    try store.setPinned(true, id: pinnedID)
+    let shelf = try model.createShelf(name: "İş")
+    let shelvedID = try #require(model.visible.first { $0.text == "iki" }?.id)
+    try store.setShelf(shelf.id, id: shelvedID)
+    let imageClip = Clip(id: UUID(), createdAt: Date(timeIntervalSince1970: 5), kind: .image,
+                         text: nil, imagePath: nil, sourceBundleID: nil, sourceName: nil,
+                         pinned: false, shelfID: nil, contentHash: "img-1", byteSize: 10)
+    try store.insert(imageClip)
+
+    // Sayfa boyutunu (300) rahatça aşan sayıda, hepsi daha yeni, ilgisiz klip.
+    for i in 0..<400 {
+        try store.insert(Clip(id: UUID(), createdAt: Date(timeIntervalSince1970: 1_000 + Double(i)),
+                              kind: .text, text: "junk-\(i)", imagePath: nil, sourceBundleID: nil,
+                              sourceName: nil, pinned: false, shelfID: nil,
+                              contentHash: "junk-\(i)", byteSize: 4))
+    }
+
+    model.tab = .pinned
+    try model.reload()
+    #expect(model.visible.map(\.id) == [pinnedID])
+
+    model.tab = .images
+    try model.reload()
+    #expect(model.visible.map(\.id) == [imageClip.id])
+
+    model.tab = .shelf(shelf.id)
+    try model.reload()
+    #expect(model.visible.map(\.id) == [shelvedID])
+}
+
 @MainActor @Test func defaultBlocklistCoversThePasswordManagers() {
     #expect(Settings.defaults.blockedBundleIDs.contains("com.1password.1password"))
     #expect(Settings.defaults.blockedBundleIDs.contains("com.apple.keychainaccess"))

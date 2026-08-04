@@ -38,17 +38,20 @@ public final class StripModel: ObservableObject {
         // şeride ve sekme çubuğunda hiçbir şeyin seçili görünmediği bir
         // ara duruma düşülür.
         try reloadShelves()
-        let base = query.isEmpty
-            ? try store.recent(limit: Self.pageSize)
-            : try store.search(query, limit: Self.pageSize)
-        visible = base.filter { clip in
-            switch tab {
-            case .all: return true
-            case .pinned: return clip.pinned
-            case .images: return clip.kind == .image
-            case .shelf(let id): return clip.shelfID == id
-            }
+        // Süzgeç artık SQL'de: 300'lük sayfa limiti her sekmenin KENDİ
+        // sonuç kümesine uygulanıyor, "300 en yeni satırı çek, sonra
+        // bellekte sekmeye göre süz" değil — aksi halde sabitlenmiş/rafa
+        // konmuş/görsel bir klip 300 satırdan eskiyince ilgili sekmede hiç
+        // görünmezdi (C2), arama ise ayrı bir yoldan geçtiği için bunu hiç
+        // fark ettirmezdi.
+        let scope: ClipStore.ClipScope
+        switch tab {
+        case .all: scope = .all
+        case .pinned: scope = .pinned
+        case .images: scope = .kind(.image)
+        case .shelf(let id): scope = .shelf(id)
         }
+        visible = try store.clips(in: scope, matching: query.isEmpty ? nil : query, limit: Self.pageSize)
         // Liste değiştiğinde eski indekste kalmak yanlış kartı yapıştırır.
         selectedIndex = 0
     }

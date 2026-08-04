@@ -14,6 +14,7 @@ final class FakeCapturePasteboard: PasteboardReading, @unchecked Sendable {
     func string() -> String? { text }
     func imageData() -> Data? { image }
     func fileURLStrings() -> [String]? { files }
+    func webURLString() -> String? { nil }
 
     /// Panoya "yeni bir kopyalama" gibi görünmesi için changeCount'u da artırır;
     /// aksi halde ClipCapture.poll ikinci çağrıda değişiklik görmez.
