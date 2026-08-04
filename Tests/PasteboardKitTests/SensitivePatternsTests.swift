@@ -166,3 +166,71 @@ import Testing
 @Test func aFortyOneCharacterAWSSecretShapeIsStillMasked() {
     #expect(SensitivePatterns.isSensitive("aWZkSBvrjn9Wvgfygw2w/MqZcUDIh7yfJs1ON43xK"))
 }
+
+// I4, üçüncü tur, bulgu 2: `looksStructural` yol/URL/dal-BAŞLANGICI
+// biçimine daraltılınca ":" ya da "." ile ayrılmış (ama "/" ile
+// BAŞLAMAYAN ya da hiç "/" TAŞIMAYAN) yapılandırılmış tanımlayıcılar bu
+// muafiyetin dışında kaldı — maven koordinatı, docker imaj referansı,
+// derleyici konumu, ISO zaman damgası, e-posta hepsi maskelenmeye
+// başladı. Ayrıca tek bir segment içinde tarih+kelime karışımı olan bir
+// dosya adı (24+ karakter, harf+rakam) tüm yol muafiyetini bozuyordu.
+
+@Test func aMavenCoordinateIsNotMasked() {
+    #expect(!SensitivePatterns.isSensitive("com.google.guava:guava:33.0.0-jre"))
+}
+
+@Test func aDockerImageReferenceIsNotMasked() {
+    #expect(!SensitivePatterns.isSensitive("ghcr.io/selinihtyr/gathr-api:sha-3f2a1b9"))
+}
+
+@Test func aCompilerLocationIsNotMasked() {
+    #expect(!SensitivePatterns.isSensitive("Sources/Store/ClipStore.swift:518:16"))
+}
+
+@Test func anISO8601TimestampIsNotMasked() {
+    #expect(!SensitivePatterns.isSensitive("2026-08-04T11:33:55+03:00"))
+}
+
+@Test func anEmailWithADigitIsNotMasked() {
+    #expect(!SensitivePatterns.isSensitive("selin.goncu+stash2026@example.com"))
+}
+
+@Test func aDateStampedScreenshotPathIsNotMasked() {
+    // Tek bir >=24 karakterlik segment ("Screenshot_2026-08-04_at_11")
+    // eskiden tüm yol muafiyetini bozuyordu — "_" ve "-" artık ayraç
+    // sayıldığı için bu segment tarih/kelime parçalarına ayrılıyor.
+    #expect(!SensitivePatterns.isSensitive(
+        "/Users/selin/Downloads/Screenshot_2026-08-04_at_11.33.55.png"))
+}
+
+// Bu daraltmanın gerçek kimlik bilgilerini ele vermediğini doğrulayan
+// karşı-testler: yukarıdaki hem gate (identifierish) hem de "_"/"-" ayraç
+// genişlemesi hiçbirini gevşetmemeli.
+
+@Test func aRealJWTIsStillMaskedAfterTheStructuralWidening() {
+    let jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
+        "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0." +
+        "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+    #expect(SensitivePatterns.isSensitive(jwt))
+}
+
+@Test func aFortyHexGitSHAIsStillMaskedAfterTheStructuralWidening() {
+    #expect(SensitivePatterns.isSensitive("36b4497aa1c3de9074f2b8c1e5a6d3f90b1c2e47"))
+}
+
+@Test func aSixtyFourHexDigestIsStillMaskedAfterTheStructuralWidening() {
+    #expect(SensitivePatterns.isSensitive(
+        "a3f5c9e1b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a6"))
+}
+
+@Test func aGitHubPATIsStillMaskedAfterTheStructuralWidening() {
+    #expect(SensitivePatterns.isSensitive("ghp_16C7e42F292c6912E7710c838347Ae178B4a"))
+}
+
+@Test func anSKAntAPIKeyIsStillMaskedAfterTheStructuralWidening() {
+    #expect(SensitivePatterns.isSensitive("sk-ant-api03-AbCdEf123456789xyz"))
+}
+
+@Test func aPEMPrivateKeyHeaderIsStillMasked() {
+    #expect(SensitivePatterns.isSensitive("-----BEGIN RSA PRIVATE KEY-----MIIEowIBAAKCAQ"))
+}

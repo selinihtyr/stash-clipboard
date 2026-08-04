@@ -110,29 +110,57 @@ public enum SensitivePatterns {
         return false
     }
 
-    // MARK: - Yapısal muafiyet (yol/URL/dal adı), daraltılmış
+    // MARK: - Yapısal muafiyet (yol/URL/tanımlayıcı zinciri), daraltılmış
 
-    private static let structuralDelimiters = Set("/:@.")
+    // "_" ve "-" I4 üçüncü turda eklendi: bir dosya adı "Screenshot_2026-
+    // 08-04_at_11.33.55.png" gibi kelime/tarih parçalarını bu iki karakterle
+    // ayırır. Onlar ayraç SAYILMAZSA tek bir "Screenshot_2026-08-04_at_11"
+    // parçası ortaya çıkar — bu, hem harf hem rakam içeren >=24 karakterlik
+    // bir dize olduğu için jeton sanılır ve tüm yolun muafiyetini bozar.
+    // Gerçek jetonların (AWS gizli anahtarı, JWT parçaları, rastgele base64
+    // blob) alfabesi bu iki karakteri neredeyse hiç taşımaz (bkz. Monte
+    // Carlo ölçümü, item 1) — bu yüzden onları ayraç sayınca zararsız
+    // dosya adlarını kurtarırken gerçek kimlik bilgilerini ele vermiyoruz.
+    private static let structuralDelimiters = Set("/:@._-")
 
-    /// Bir dizenin gerçekten bir dosya yolu, URL ya da git dalı gibi
-    /// GÖRÜNÜP görünmediğine karar verir — eski kural gibi "içinde ayraç
-    /// var mı"ya değil, dizenin BAŞINA ve BİÇİMİNE bakar. Ayrıca ayraçla
-    /// ayrılmış hiçbir parçası tek başına jeton gibi görünmemeli: aksi
-    /// halde "/tmp/<jwt>" ya da "https://host/reset?token=<jwt>" gibi bir
-    /// kimlik bilgisini bir yol/URL'nin İÇİNE gizlemek onu görünür kılardı
-    /// — hem eski hem önceki yeni kural bunu kaçırıyordu.
+    /// Bir dizenin gerçekten bir dosya yolu, URL ya da yapılandırılmış bir
+    /// tanımlayıcı zinciri (maven koordinatı, docker imaj referansı,
+    /// derleyici konumu, ISO zaman damgası, e-posta) gibi GÖRÜNÜP
+    /// görünmediğine karar verir — eski kural gibi "içinde ayraç var mı"ya
+    /// değil, dizenin BAŞINA ve BİÇİMİNE bakar. Ayrıca ayraçla ayrılmış
+    /// hiçbir parçası tek başına jeton gibi görünmemeli: aksi halde
+    /// "/tmp/<jwt>" ya da "https://host/reset?token=<jwt>" gibi bir kimlik
+    /// bilgisini bir yol/URL'nin İÇİNE gizlemek onu görünür kılardı — hem
+    /// eski hem önceki yeni kural bunu kaçırıyordu.
     static func looksStructural(_ text: String) -> Bool {
         let pathish = text.hasPrefix("/") || text.hasPrefix("~/")
             || text.hasPrefix("./") || text.hasPrefix("../")
         let urlish = text.range(of: #"^[A-Za-z][A-Za-z0-9+.\-]*://"#,
                                 options: .regularExpression) != nil
-        let refish = text.range(of: #"^[A-Za-z0-9._\-]+(/[A-Za-z0-9._\-]+)+$"#,
-                                options: .regularExpression) != nil
-        guard pathish || urlish || refish else { return false }
+        // Eski `refish`in genellemesi (I4, üçüncü tur): yalnızca "/" değil,
+        // "/", ":", "@" ayraçlarından HERHANGİ BİRİYLE ayrılmış bir zincir
+        // de yapılandırılmış bir tanımlayıcı gibi görünür. Maven koordinatı
+        // ("grup:artefakt:sürüm"), docker imaj referansı
+        // ("kayıt/ad:etiket"), derleyici konumu ("dosya:satır:sütun"),
+        // ISO-8601 zaman damgası ("ss:dd:ss") ve e-posta ("yerel@alan")
+        // hepsi bu biçimde ama hiçbiri "/" ile başlamıyor ya da bir URL
+        // şeması taşımıyor — eski `refish` yalnızca "/" ayracını kabul
+        // ettiği için hepsini "yüksek entropili jeton" sanıyordu.
+        let identifierish = text.range(
+            of: #"^[A-Za-z0-9._+\-]+([/:@][A-Za-z0-9._+\-]+)+$"#,
+            options: .regularExpression) != nil
+        guard pathish || urlish || identifierish else { return false }
+        return !containsTokenShapedSegment(text)
+    }
 
-        let segments = text.split(whereSeparator: { structuralDelimiters.contains($0) })
-        let anyTokenShapedSegment = segments.contains { isTokenShapedSegment(String($0)) }
-        return !anyTokenShapedSegment
+    /// `text`i `structuralDelimiters`e göre parçalara ayırıp herhangi bir
+    /// parçanın tek başına jeton gibi görünüp görünmediğine bakar —
+    /// `looksStructural`in (dosya yolu/URL biçimi) kullandığı ortak
+    /// mekanizma; `isSensitiveLink` de aynısını URL yolu/sorgu parçaları
+    /// için yeniden kullanacak (I4, üçüncü tur, madde 3).
+    private static func containsTokenShapedSegment(_ text: String) -> Bool {
+        text.split(whereSeparator: { structuralDelimiters.contains($0) })
+            .contains { isTokenShapedSegment(String($0)) }
     }
 
     /// Tek bir yol/URL parçasının kendi başına bir jeton gibi görünüp
