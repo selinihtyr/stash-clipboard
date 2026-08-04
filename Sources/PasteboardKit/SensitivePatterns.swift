@@ -28,7 +28,31 @@ public enum SensitivePatterns {
         let digits = text.filter(\.isNumber)
         guard (13...19).contains(digits.count) else { return false }
         // Rakam ve boşluk/tire dışında bir şey varsa kart numarası değildir.
-        return text.allSatisfy { $0.isNumber || $0 == " " || $0 == "-" }
+        guard text.allSatisfy({ $0.isNumber || $0 == " " || $0 == "-" }) else { return false }
+        // Luhn olmadan bu, aynı uzunluktaki her rakam dizisini (ISBN-13,
+        // kargo takip numarası, fatura kimliği) kart sanıyordu — "bu bir
+        // kart" iddiası kart olmayan şeyler için yanlış çıkıyordu
+        // (fix round 1, bulgu 2). Luhn-geçerli ama kart olmayan bir dizi
+        // yine de maskelenir; bu güvenli yön, sorun değil.
+        return isLuhnValid(digits)
+    }
+
+    /// Standart Luhn sağlaması: sağdan başlayıp her ikinci haneyi ikiye
+    /// katlar, 9'dan büyükse 9 çıkarır, toplam 10'a bölünüyorsa geçerlidir.
+    static func isLuhnValid(_ digits: String) -> Bool {
+        var sum = 0
+        var shouldDouble = false
+        for char in digits.reversed() {
+            guard let value = char.wholeNumberValue else { return false }
+            var doubled = value
+            if shouldDouble {
+                doubled *= 2
+                if doubled > 9 { doubled -= 9 }
+            }
+            sum += doubled
+            shouldDouble.toggle()
+        }
+        return sum > 0 && sum % 10 == 0
     }
 
     static func isHighEntropyToken(_ text: String) -> Bool {

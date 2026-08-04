@@ -29,3 +29,20 @@ import Testing
     #expect(masked.hasPrefix("••••"))
     #expect(!masked.contains("ghp_"))
 }
+
+// Fix round 1, bulgu 2: isCardNumber Luhn kontrolü olmadan 13-19 haneli her
+// diziyi (ISBN, takip numarası, fatura kimliği) kart sanıyordu.
+
+@Test func luhnValidTestCardNumberIsMasked() {
+    // Stripe'ın herkese açık test kartı — gerçek, Luhn geçerli bir numara.
+    #expect(SensitivePatterns.isSensitive("4242 4242 4242 4242"))
+    #expect(SensitivePatterns.mask("4242 4242 4242 4242") == "•••• 4242")
+}
+
+@Test func isbn13LooksLikeACardButFailsLuhnSoItIsNotMasked() {
+    #expect(!SensitivePatterns.isSensitive("978-3-16-148410-0"))
+}
+
+@Test func luhnInvalidSixteenDigitNumberIsNotMasked() {
+    #expect(!SensitivePatterns.isSensitive("1234567812345678"))
+}

@@ -25,8 +25,7 @@ struct ClipCardView: View {
     }
 
     private var isSensitive: Bool {
-        guard let text = clip.text else { return false }
-        return SensitivePatterns.isSensitive(text)
+        shouldMask(kind: clip.kind, text: clip.text)
     }
 
     private var displayText: String {
