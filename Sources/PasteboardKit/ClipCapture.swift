@@ -53,6 +53,20 @@ public final class ClipCapture {
         self.policy = policy
     }
 
+    /// `PasteEngine`in kendi yazdığı bir pano değişikliğini işaretler
+    /// (I2): bir sonraki `poll` bu tam `changeCount`u gördüğünde onu
+    /// "değişiklik yok" sayıp atlar — `lastChangeCount`in zaten yaptığı
+    /// karşılaştırmaya, dışarıdan bilinen bir değeri erkenden yerleştirmekten
+    /// başka bir şey değil. Yalnızca BU değişiklik atlanır: hemen ardından
+    /// gelen gerçek bir kullanıcı kopyalaması panonun changeCount'unu
+    /// yeniden ilerletir, bir sonraki `poll` onu normal şekilde yakalar.
+    /// `ClipCapture` bunu kimin çağırdığını bilmiyor — `PasteEngine`i hiç
+    /// içe aktarmıyor, iki modül birbirinden habersiz kalıyor (bkz.
+    /// `PasteEngine.onWrite`, bağlayan taraf `AppDelegate`).
+    public func suppressChangeCount(_ changeCount: Int) {
+        lastChangeCount = changeCount
+    }
+
     public func poll(frontmostBundleID: String?) -> CapturedClip? {
         let count = pasteboard.changeCount
         defer { lastChangeCount = count }

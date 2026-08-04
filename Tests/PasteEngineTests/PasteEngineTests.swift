@@ -7,8 +7,19 @@ final class FakePasteboardWriter: PasteWriting {
     var lastText: String?
     var lastPlainOnly = false
     var lastImage: Data?
-    func writeText(_ text: String, plainOnly: Bool) { lastText = text; lastPlainOnly = plainOnly }
-    func writeImage(_ data: Data) { lastImage = data }
+    /// Gerçek `NSPasteboard.changeCount` gibi her yazımda ilerler; I2'nin
+    /// `onWrite` kancasının doğru değeri taşıdığını test edebilmek için.
+    var changeCount = 0
+    func writeText(_ text: String, plainOnly: Bool) -> Int {
+        lastText = text; lastPlainOnly = plainOnly
+        changeCount += 1
+        return changeCount
+    }
+    func writeImage(_ data: Data) -> Int {
+        lastImage = data
+        changeCount += 1
+        return changeCount
+    }
 }
 
 final class FakeKeystrokes: KeystrokeSending {
@@ -65,6 +76,20 @@ final class FakeKeystrokes: KeystrokeSending {
     let outcome = PasteEngine(pasteboard: pb, keystrokes: keys).paste(text: "merhaba", filters: [])
     #expect(pb.lastText == "merhaba")
     #expect(outcome == .copiedOnlyKeystrokeFailed)
+}
+
+@Test func onWriteReportsTheChangeCountProducedByTheWrite() {
+    // I2: bunu dinleyen taraf (bkz. AppDelegate) kendi yazdığı değişikliği
+    // ClipCapture'a "bunu atla" diye iletiyor. Yanlış ya da eski bir sayı
+    // taşırsa ya kendi yazdığımızı yakalarız (I2'nin ta kendisi) ya da
+    // ardından gelen gerçek bir kopyalamayı yanlışlıkla atlarız.
+    let pb = FakePasteboardWriter(); let keys = FakeKeystrokes()
+    var reported: [Int] = []
+    let engine = PasteEngine(pasteboard: pb, keystrokes: keys)
+    engine.onWrite = { reported.append($0) }
+    _ = engine.paste(text: "bir", filters: [])
+    _ = engine.paste(imageData: Data([1, 2, 3]))
+    #expect(reported == [pb.changeCount - 1, pb.changeCount])
 }
 
 @Test func imagesGoThroughTheSamePermissionLogic() {

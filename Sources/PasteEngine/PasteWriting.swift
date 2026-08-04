@@ -3,8 +3,15 @@ import ApplicationServices
 import Foundation
 
 public protocol PasteWriting: AnyObject {
-    func writeText(_ text: String, plainOnly: Bool)
-    func writeImage(_ data: Data)
+    /// Yazımdan sonraki pano `changeCount`'unu döndürür. `PasteEngine` bunu
+    /// dışarı (bkz. `onWrite`) taşıyor ki kendi yazdığımız bir değişikliği
+    /// panoyu yoklayan taraf (ayrı bir modülde, `PasteWriting`i hiç bilmeyen
+    /// `ClipCapture`) kullanıcının yeni bir kopyalaması sanıp geri
+    /// yakalamasın (I2). Panoyu asıl yazan bu tip olduğu için changeCount'u
+    /// burada üretmek, çağıranın ayrıca panoyu okumasından daha güvenilir:
+    /// arada başka bir değişiklik olma ihtimali sıfıra iner.
+    @discardableResult func writeText(_ text: String, plainOnly: Bool) -> Int
+    @discardableResult func writeImage(_ data: Data) -> Int
 }
 
 public protocol KeystrokeSending: AnyObject {
@@ -24,15 +31,19 @@ public final class SystemPasteboardWriter: PasteWriting {
     /// yazıyoruz, yani pano her zaten düz metin. Parametre, filtre listesinin
     /// niyetini pano katmanına taşıyor; zengin bir temsil eklenirse burası
     /// dallanacak yer olur.
-    public func writeText(_ text: String, plainOnly: Bool) {
+    @discardableResult
+    public func writeText(_ text: String, plainOnly: Bool) -> Int {
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(text, forType: .string)
+        return pb.changeCount
     }
-    public func writeImage(_ data: Data) {
+    @discardableResult
+    public func writeImage(_ data: Data) -> Int {
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setData(data, forType: .png)
+        return pb.changeCount
     }
 }
 

@@ -8,8 +8,17 @@ import PasteEngine
 final class RecordingWriter: PasteWriting {
     var lastText: String?
     var lastImage: Data?
-    func writeText(_ text: String, plainOnly: Bool) { lastText = text }
-    func writeImage(_ data: Data) { lastImage = data }
+    var changeCount = 0
+    func writeText(_ text: String, plainOnly: Bool) -> Int {
+        lastText = text
+        changeCount += 1
+        return changeCount
+    }
+    func writeImage(_ data: Data) -> Int {
+        lastImage = data
+        changeCount += 1
+        return changeCount
+    }
 }
 
 final class TrustedKeys: KeystrokeSending {

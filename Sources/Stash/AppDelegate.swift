@@ -68,6 +68,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let capture = ClipCapture(pasteboard: SystemPasteboard(),
                                       policy: CapturePolicy(blockedBundleIDs: settingsStore.settings.blockedBundleIDs))
             self.capture = capture
+            // PasteEngine ve ClipCapture ayrı modüllerde, birbirini hiç
+            // bilmiyor (bkz. PasteEngine.onWrite gerekçesi); AppDelegate
+            // ikisini birbirine bağlayan tek yer. Bağlantı olmadan Stash
+            // kendi yaptığı her yapıştırmayı 0,5 saniye sonra normal bir
+            // kullanıcı kopyalaması sanıp geri yakalar — kartın sourceName'i
+            // yapıştırılan uygulamaya döner, filtreli bir yapıştırma da
+            // (metni değiştirdiği için) ayrı bir satır olarak ikilenir (I2).
+            engine.onWrite = { [weak capture] changeCount in
+                capture?.suppressChangeCount(changeCount)
+            }
             let coordinator = CaptureCoordinator(store: store, capture: capture)
             coordinator.onCapture = { [weak self] in try? self?.model?.reload() }
             coordinator.onError = { [weak self] _ in

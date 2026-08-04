@@ -14,19 +14,30 @@ public final class PasteEngine {
     private let pasteboard: PasteWriting
     private let keystrokes: KeystrokeSending
 
+    /// Her başarılı pano yazımından hemen sonra, o yazımın ürettiği
+    /// `changeCount` ile çağrılır. `PasteEngine` panoyu yoklayan tarafı
+    /// (ayrı bir modülde yaşayan `ClipCapture`) hiç bilmiyor ve bilmemeli —
+    /// bu kancayı kimin dinlediği tamamen çağırana kalmış (bkz.
+    /// `AppDelegate`, iki modülü birbirine bağlayan tek yer). Boş bırakılırsa
+    /// hiçbir şey değişmez, sadece kendi yazdığımız değişiklik normal bir
+    /// kullanıcı kopyalaması gibi geri yakalanabilir hale gelir (I2).
+    public var onWrite: ((Int) -> Void)?
+
     public init(pasteboard: PasteWriting, keystrokes: KeystrokeSending) {
         self.pasteboard = pasteboard
         self.keystrokes = keystrokes
     }
 
     public func paste(text: String, filters: [PasteFilter]) -> PasteOutcome {
-        pasteboard.writeText(apply(filters, to: text),
-                             plainOnly: filters.contains(.plainText))
+        let changeCount = pasteboard.writeText(apply(filters, to: text),
+                                               plainOnly: filters.contains(.plainText))
+        onWrite?(changeCount)
         return deliver()
     }
 
     public func paste(imageData: Data) -> PasteOutcome {
-        pasteboard.writeImage(imageData)
+        let changeCount = pasteboard.writeImage(imageData)
+        onWrite?(changeCount)
         return deliver()
     }
 
