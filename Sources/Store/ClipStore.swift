@@ -464,9 +464,18 @@ public final class ClipStore {
         if sqlite3_changes(db) == 0 { try insert(clip) }
     }
 
+    /// `images/` VE `thumbs/` toplamı: Ayarlar'daki "Görsellerin kapladığı
+    /// alan" etiketi doğrudan bu sayıyı gösteriyor, gerçek disk kullanımıyla
+    /// uyuşması gerekiyor. Yalnızca `images/`i saymak, `thumbs/`taki öksüz
+    /// bir küçük resmin `highWater` guard'ını hiç tetikleyememesi anlamına
+    /// geliyordu — süpürmeyi hak eden bir dosya "görünmez" kalıyordu.
     public func imagesByteSize() throws -> Int {
+        directoryByteSize(imagesDirectory) + directoryByteSize(thumbsDirectory)
+    }
+
+    private func directoryByteSize(_ directory: URL) -> Int {
         let fm = FileManager.default
-        let files = (try? fm.contentsOfDirectory(at: imagesDirectory,
+        let files = (try? fm.contentsOfDirectory(at: directory,
                                                  includingPropertiesForKeys: [.fileSizeKey])) ?? []
         return files.reduce(0) { total, url in
             total + ((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
@@ -522,13 +531,18 @@ public final class ClipStore {
         let fm = FileManager.default
         for clip in candidates {
             guard size > lowWater, let path = clip.imagePath else { break }
-            // Boyutu dosya silinmeden ÖNCE oku: silindikten sonra okumak
+            let thumbPath = thumbsDirectory.appendingPathComponent("\(clip.id.uuidString).jpg")
+            // Boyutları dosyalar silinmeden ÖNCE oku: silindikten sonra okumak
             // hep 0 döner ve döngü hiçbir zaman lowWater'a yakınsamaz.
-            let bytes = (try? fm.attributesOfItem(atPath: path)[.size] as? Int) ?? 0
+            let imageBytes = (try? fm.attributesOfItem(atPath: path)[.size] as? Int) ?? 0
+            // `imagesByteSize()` artık thumbs/'u da sayıyor; küçük resmin
+            // boyutunu düşmeyi unutursak `size` gerçek kalan boyuttan büyük
+            // kalır ve döngü hiç yakınsamadan gerekenden fazla kart siler.
+            let thumbBytes = (try? fm.attributesOfItem(atPath: thumbPath.path)[.size] as? Int) ?? 0
             try? fm.removeItem(atPath: path)
-            try? fm.removeItem(at: thumbsDirectory.appendingPathComponent("\(clip.id.uuidString).jpg"))
+            try? fm.removeItem(at: thumbPath)
             try exec("UPDATE clips SET imagePath = NULL WHERE id = '\(clip.id.uuidString)';")
-            size -= bytes
+            size -= (imageBytes + thumbBytes)
             removed += 1
         }
         return removed

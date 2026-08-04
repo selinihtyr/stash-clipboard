@@ -42,6 +42,18 @@ private func imageClip(_ store: ClipStore, bytes: Int, at seconds: TimeInterval,
     #expect(try store.imagesByteSize() == 3_500)
 }
 
+@Test func imagesByteSizeIncludesOrphanedThumbnails() throws {
+    // imagesByteSize() yalnızca images/ dizinini sayıyordu; thumbs/'taki bir
+    // öksüz küçük resim highWater guard'ını asla tetikleyemiyordu, dolayısıyla
+    // süpürülmeyi hiç hak etmemiş gibi görünüyordu. Ayarlar'daki "Görsellerin
+    // kapladığı alan" etiketiyle gerçek disk kullanımı da uyuşmuyordu.
+    let store = try makeStore()
+    _ = try imageClip(store, bytes: 1_000, at: 1)
+    let orphanThumb = store.thumbsDirectory.appendingPathComponent("orphan-\(UUID().uuidString).jpg")
+    try Data(repeating: 0xCD, count: 200).write(to: orphanThumb)
+    #expect(try store.imagesByteSize() == 1_200)
+}
+
 @Test func pruneStopsAtTheLowWaterMarkNotTheHighOne() throws {
     // Yüksek eşiğin hemen altında durulsaydı her yeni görsel budamayı
     // yeniden tetiklerdi; histerezis bunun için var.
@@ -67,6 +79,22 @@ private func imageClip(_ store: ClipStore, bytes: Int, at seconds: TimeInterval,
     _ = try store.pruneImages(highWater: 2_000, lowWater: 1_000)
     #expect(try store.recent(limit: 10).count == 3)
     #expect(try store.recent(limit: 10).filter { $0.imagePath == nil }.count >= 1)
+}
+
+@Test func pruneAccountsForThumbnailBytesSoItConvergesInsteadOfOverPruning() throws {
+    // imagesByteSize() artık thumbs/'u da sayıyor; eğer budama döngüsü bir
+    // adayı silerken yalnızca orijinal görselin boyutunu düşüp küçük resmin
+    // boyutunu unutursa, `size` hiçbir zaman gerçek kalan boyutu yansıtmaz ve
+    // döngü lowWater'a asla yakınsayamayıp gerekenden fazla kart silerdi.
+    let store = try makeStore()
+    for i in 1...3 {
+        let clip = try imageClip(store, bytes: 1_000, at: TimeInterval(i))
+        let thumbURL = store.thumbsDirectory.appendingPathComponent("\(clip.id.uuidString).jpg")
+        try Data(repeating: 0xCD, count: 500).write(to: thumbURL)
+    }
+    let removed = try store.pruneImages(highWater: 4_000, lowWater: 1_500)
+    #expect(removed == 2)
+    #expect(try store.imagesByteSize() == 1_500)
 }
 
 @Test func pruneDoesNothingBelowTheHighWaterMark() throws {
