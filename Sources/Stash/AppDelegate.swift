@@ -283,10 +283,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// `attemptPaste`, `.nothingToPaste`i klibin `kind`'ına BAKMADAN, yapıştırma
+    /// nil dönen HER klip için üretir (bkz. StripModel.PasteAttempt üstündeki
+    /// gerekçe) — ama bu metin "Görseli" diyerek her zaman görsel varsayıyordu.
+    /// Bugün bu yol pratikte yalnızca budanmış bir görselle tetikleniyor
+    /// (metin/bağlantı/dosya kliplerinin `text`i neredeyse hiç nil olmuyor),
+    /// ama kod yolu türden bağımsız olduğu sürece metin de öyle olmalı —
+    /// aksi halde "her zaman görsel diyor" iddiası bir gün yalan çıkar.
     private func presentNothingToPasteAlert() {
         let alert = NSAlert()
         alert.messageText = "Bu kartta yapıştıracak bir şey yok"
-        alert.informativeText = "Görseli artık saklanmıyor. Sil, ya da yeniden kopyala."
+        alert.informativeText = "İçerik artık kullanılamıyor. Sil, ya da yeniden kopyala."
         alert.addButton(withTitle: "Tamam")
         alert.runModal()
     }
