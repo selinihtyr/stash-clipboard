@@ -24,55 +24,71 @@ manager only gets right if someone bothered.
 
 ## The details that took the work
 
-**Pasting an image adapts to where it lands.** Paste into Notes and you get the
-image. Paste into Terminal — which cannot accept images at all — and you get
-the file's path instead of nothing. Paste into Finder and you get the file.
-Each destination takes the richest thing it understands, the way macOS itself
-behaves when you copy a file.
+### Pasting an image adapts to where it lands
 
-**It never records what your password manager copies.** Apps signal "don't
-store this" with an unofficial but widely honoured pasteboard type
-(`org.nspasteboard.ConcealedType` and friends). Stash checks that *before*
-reading any content. 1Password and Keychain Access are blocklisted on top of
-that, and you can add more.
+Paste into Notes and you get the image. Paste into Terminal — which cannot
+accept images at all — and you get the file's path instead of nothing. Paste
+into Finder and you get the file. Each destination takes the richest thing it
+understands, the way macOS itself behaves when you copy a file.
 
-**Masking knows a link from a token.** A bare URL stays readable — hiding every
-GitHub link you copy would make the strip useless. But if a link's path or
-query carries a credential (a password reset, a magic link, a presigned S3
-URL), that gets masked. Card numbers are checked with a Luhn checksum, so an
-ISBN or a tracking number is not mistaken for a card.
+### Your password manager's clipboard is never stored
 
-**It doesn't re-capture its own paste.** Without that, every paste would
-overwrite the card's "copied from" with wherever you pasted it, and a filtered
-paste would silently duplicate the entry.
+Apps signal "don't store this" with an unofficial but widely honoured
+pasteboard type (`org.nspasteboard.ConcealedType` and friends). Stash checks
+for it *before* reading any content. 1Password and Keychain Access are
+blocklisted on top of that, and you can add more.
 
-**When it can't paste, it says so.** No Accessibility permission, or the
-keystroke couldn't be posted — either way you get told the content is on the
-clipboard and ⌘V is yours. It never closes the strip having done nothing.
+### Masking tells a link from a token
 
-**It can watch your screenshot folder.** ⌘⇧4 writes a file and never touches
-the clipboard, so no clipboard manager can see it. Turn this on and Stash picks
-up new screenshots from wherever macOS saves them. Off by default; only files
-macOS itself tags as screenshots; only ones created after you turned it on.
+A bare URL stays readable — hiding every GitHub link you copy would make the
+strip useless. But when a link's path or query carries a credential (a password
+reset, a magic link, a presigned S3 URL), that gets masked. Card numbers are
+verified with a Luhn checksum, so an ISBN or a tracking number isn't mistaken
+for one.
 
-**A corrupt database is moved aside, never deleted.** We can't recover it — but
-it's yours, and throwing it away isn't ours to do. Stash opens a fresh one,
-keeps the old file next to it, and tells you where it went. Integrity is
-checked at open with `PRAGMA quick_check`, so a half-written page is caught
-then rather than surfacing as a mystery failure later.
+### It doesn't re-capture its own paste
 
-**Deleting a shelf keeps its cards.** You're removing a folder, not binning
-what was in it.
+Without that, every paste would overwrite a card's "copied from" with wherever
+you pasted it, and a filtered paste would silently duplicate the entry.
 
-**"Clear everything" spares what you pinned** — and actually deletes the image
-files, not just the rows.
+### When it can't paste, it says so
 
-**The sounds don't lie.** Silent for the clipboard content that's already there
-at launch. Silent for anything deliberately not stored. And if a paste degrades
-to a copy, you hear the copy sound, not the paste one.
+No Accessibility permission, or the keystroke couldn't be posted — either way
+you're told the content is on the clipboard and ⌘V is yours. It never closes
+the strip having quietly done nothing.
 
-**Card controls act on the card under the pointer**, not the selected one — so
-reaching for the mouse never changes what ↵ would paste.
+### It can watch your screenshot folder
+
+⌘⇧4 writes a file and never touches the clipboard, so no clipboard manager can
+see it. Turn this on and Stash picks up new screenshots from wherever macOS
+saves them. Off by default; only files macOS itself tags as screenshots; only
+ones created after you turned it on.
+
+### A corrupt database is moved aside, never deleted
+
+We can't recover it — but it's yours, and throwing it away isn't ours to do.
+Stash opens a fresh one, keeps the old file beside it, and tells you where it
+went. Integrity is checked at open with `PRAGMA quick_check`, so a half-written
+page is caught then rather than surfacing as a mystery failure weeks later.
+
+### Deleting a shelf keeps its cards
+
+You're removing a folder, not binning what was in it.
+
+### "Clear everything" spares what you pinned
+
+And it deletes the image files too, not just the database rows.
+
+### The sounds don't lie
+
+Silent for whatever is already on the clipboard at launch. Silent for anything
+deliberately not stored. And if a paste degrades to a copy, you hear the copy
+sound, not the paste one.
+
+### Card controls act on the card under the pointer
+
+Not the selected one — so reaching for the mouse never changes what ↵ would
+paste.
 
 ## Install
 
