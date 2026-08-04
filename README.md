@@ -20,10 +20,22 @@ yapıştırır.
   haneli her sayı dizisi değil, gerçekten kart numarası gibi *doğrulanan*
   diziler maskelenir (ISBN, kargo takip numarası gibi rastgele 13-19 haneli
   diziler maskelenmez, Luhn'dan geçerlerse yine de maskelenir — bu yön
-  güvenli tarafta bir hata). Bağlantılar bu korumadan bilerek hariç
-  tutulur: sorgu dizesi ya da fragment içeren sıradan bir URL, jeton
-  tespitine göre "yüksek entropili" görünüp maskelenirdi — bağlantılar en
-  sık kopyalanan içeriklerden biri olduğu için şeridi işe yaramaz kılardı.
+  güvenli tarafta bir hata). Bağlantılar çıplak durdukları sürece
+  maskelenmez — sık kopyalanan sıradan bir URL'yi (arama sonucu, GitHub
+  PR'ı) gizleyip şeridi işe yaramaz kılmak istemiyoruz. Ama bir bağlantının
+  yolu, sorgu dizesi ya da fragment'ı bir jeton *taşıyorsa* (parola
+  sıfırlama bağlantısı, magic-link, presigned S3 URL'si) o jeton maskelenir
+  — "bağlantı" olması onu bağışık kılmaz, çünkü omuz üstünden okumaya karşı
+  bu özelliğin var olma sebebi tam olarak bu senaryo.
+
+  **Bilinen sınırlar.** Maskeleme sezgisel çalışır, kesin bir sınır değil:
+  - İçinde boşluk geçen metin hiç maskelenmez — bir `Bearer eyJ…` başlığı,
+    bir `curl -H "Authorization: …"` satırı ya da "Şifrem: ..." gibi bir
+    cümle düz metin olarak görünür.
+  - Bu, omuz üstünden okumaya karşı bir caydırıcıdır, veri kaybını önleyen
+    bir güvenlik sınırı değildir. Sezgisel olduğu için ara sıra sıradan bir
+    şeyi gizler (çift tıklayınca açılır) ve ara sıra sıra dışı bir şeyi
+    kaçırır.
 - **Veritabanı şifreli değildir.** `~/Library/Application Support/Stash/`
   dizini yalnızca sizin kullanıcınıza açıktır (0700), ama şifreleme için
   FileVault'a güvenir. Disk şifresi kapalıysa geçmiş düz metin olarak durur.
