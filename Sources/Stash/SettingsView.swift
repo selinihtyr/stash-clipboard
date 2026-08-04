@@ -17,6 +17,13 @@ final class ShortcutRecorder: ObservableObject {
     @Published private(set) var isRecording = false
     private var monitor: Any?
 
+    /// Yalnızca test için: gerçek bir tuş vuruşu göndermeden izleyicinin
+    /// hâlâ kurulu olup olmadığını doğrulamanın tek yolu bu — `isRecording`
+    /// tek başına yeterli değil, çünkü asıl kaçak olan `monitor`, bayrak
+    /// değil (bkz. I1: pencere kapanınca `isRecording` yanlışlıkla true
+    /// kalmaz ama eski kodda `monitor` kalırdı).
+    var isMonitoring: Bool { monitor != nil }
+
     func start(onCapture: @escaping (KeyCombo) -> Void) {
         stop()
         isRecording = true
@@ -54,7 +61,14 @@ struct SettingsView: View {
     @ObservedObject var settingsStore: SettingsStore
     let store: ClipStore
     let onChange: (StashCore.Settings) -> Void
-    @StateObject private var recorder = ShortcutRecorder()
+    // Artık `@StateObject` DEĞİL: sahiplik `SettingsWindowController`'a taşındı
+    // (bkz. I1) çünkü `.onDisappear` bu pencere kurulumunda (isReleasedWhenClosed
+    // = false + AppDelegate'in kontrolcüyü tutması) pencere kapanınca hiç
+    // tetiklenmiyor — SwiftUI view hiyerarşisi pencereyle birlikte hayatta
+    // kalıyor. Kontrolcü artık pencerenin gerçekten yok olduğu anı (close VE
+    // orderOut) yakalayıp `recorder.stop()` çağırıyor; view burada sadece
+    // paylaşılan nesneyi gözlemliyor.
+    @ObservedObject var recorder: ShortcutRecorder
 
     // `Settings` çıplak yazılınca SwiftUI.Settings (bir Scene tipi) ile
     // çakışıyor; StashCore.Settings modül önekiyle belirtiliyor.
