@@ -468,10 +468,12 @@ public final class ClipStore {
         if sqlite3_changes(db) == 0 { try insert(clip) }
     }
 
-    /// `images/` VE `thumbs/` toplamı: Ayarlar'daki "Görsellerin kapladığı
-    /// alan" etiketi doğrudan bu sayıyı gösteriyor, gerçek disk kullanımıyla
-    /// uyuşması gerekiyor. Yalnızca `images/`i saymak, `thumbs/`taki öksüz
-    /// bir küçük resmin `highWater` guard'ını hiç tetikleyememesi anlamına
+    /// `images/` VE `thumbs/` toplamı: Ayarlar'daki "Görsel ve
+    /// önizlemelerin kapladığı alan" etiketi doğrudan bu sayıyı gösteriyor,
+    /// gerçek disk kullanımıyla uyuşması gerekiyor (bulgu 5: etiket eskiden
+    /// yalnızca "Görsellerin" diyordu, sayı thumbs/'u içerdiği için ikisi
+    /// uyuşmuyordu). Yalnızca `images/`i saymak, `thumbs/`taki öksüz bir
+    /// küçük resmin `highWater` guard'ını hiç tetikleyememesi anlamına da
     /// geliyordu — süpürmeyi hak eden bir dosya "görünmez" kalıyordu.
     public func imagesByteSize() throws -> Int {
         directoryByteSize(imagesDirectory) + directoryByteSize(thumbsDirectory)

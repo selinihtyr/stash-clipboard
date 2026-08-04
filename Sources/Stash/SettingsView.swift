@@ -179,7 +179,11 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Geçmiş") {
-                LabeledContent("Görsellerin kapladığı alan", value: diskText)
+                // "Görseller VE önizlemeler": imagesByteSize() thumbs/'u da
+                // sayıyor (bkz. ClipStore'daki gerekçe) — etiket yalnızca
+                // "Görsellerin" derse gösterilen sayıyla uyuşmaz, kullanıcı
+                // diskte gördüğünden daha büyük bir rakam görür.
+                LabeledContent("Görsel ve önizlemelerin kapladığı alan", value: diskText)
                 Button("Son bir saati temizle") {
                     try? store.deleteCreated(after: Date().addingTimeInterval(-3600))
                     refresh()
