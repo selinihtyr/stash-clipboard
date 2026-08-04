@@ -65,6 +65,7 @@ struct SettingsView: View {
     @State private var diskText = "hesaplanıyor…"
     @State private var shelves: [Shelf] = []
     @State private var newShelfName = ""
+    @State private var newBlockedBundleID = ""
     @State private var errorAlert: AlertMessage?
     // body içinde AXIsProcessTrusted() doğrudan okunsaydı SwiftUI'nin yeniden
     // çizilmesini tetikleyecek hiçbir şey olmazdı: kullanıcı "verilmedi"
@@ -138,6 +139,12 @@ struct SettingsView: View {
                         }
                     }
                 }
+                HStack {
+                    TextField("Paket kimliği, ör. com.apple.Notes", text: $newBlockedBundleID)
+                    Button("Ekle", action: addBlockedBundleID)
+                }
+                Text("Ters etki alanı biçiminde bir paket kimliği gerekir (ör. com.apple.Notes).")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Raflar") {
                 ForEach(shelves) { shelf in
@@ -218,6 +225,26 @@ struct SettingsView: View {
 
     private func refreshShelves() {
         shelves = (try? store.shelves()) ?? []
+    }
+
+    /// `onChange(settings)`i Kaldır düğmesiyle AYNI şekilde, tıklamayla eşzamanlı
+    /// çağırıyoruz (pencere kapanana kadar biriktirmiyoruz): AppDelegate.openSettings
+    /// bu kapanışta `capture?.updatePolicy(...)`i çalıştırıyor, o yüzden yeni
+    /// engellenen uygulama çalışan yakalamaya yeniden başlatma gerekmeden hemen
+    /// ulaşıyor — kaldırmanın bugün zaten yaptığı canlı güncelleme yoluyla.
+    private func addBlockedBundleID() {
+        switch validateBlockedBundleID(newBlockedBundleID, existing: settings.blockedBundleIDs) {
+        case .valid(let id):
+            settings.blockedBundleIDs.insert(id)
+            onChange(settings)
+            newBlockedBundleID = ""
+        case .invalid(let reason):
+            // Raf adı boş bırakıldığında createShelf()'in yaptığı gibi:
+            // sessizce hiçbir şey olmamış gibi davranmak yerine görünür bir
+            // hata, kullanıcıyı neyin ters gittiği konusunda karanlıkta
+            // bırakmaz.
+            errorAlert = AlertMessage(title: "Uygulama eklenemedi", detail: reason)
+        }
     }
 
     private func createShelf() {
