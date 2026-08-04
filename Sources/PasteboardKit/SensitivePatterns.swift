@@ -55,10 +55,25 @@ public enum SensitivePatterns {
         return sum > 0 && sum % 10 == 0
     }
 
+    /// Yol/URL/DSN ayraçları: dosya yolu "/", DSN şema ("postgres://"),
+    /// kullanıcı@host ("user@localhost"), host:port ("localhost:5432") ve
+    /// uzantı/alan adı ("IMG_...png", "localhost") hep bu dört karakterden
+    /// birini kullanır. Gerçek API anahtarları ve oturum jetonları (ör.
+    /// "sk-ant-api03-…", "ghp_…") yalnızca harf/rakam ve bazen "-"/"_"
+    /// içerir, bunları hiç kullanmaz — bu yüzden bu karakter kümesi, "yapılan-
+    /// dırılmış bir tanımlayıcı" ile "opak bir jeton"u ayırmak için isabetli
+    /// bir sinyal (I4, fix round 1'in ardından ikinci tur: dosya yolu, git
+    /// dalı adı — "feat/stash-v1-…" — ve DSN artık maskelenmiyor). 40
+    /// karakterlik onaltılık bir git SHA'sı bu karakterlerin hiçbirini
+    /// içermediği için bu elemeden geçer ve hâlâ maskelenir — bilinçli,
+    /// kabul edilebilir bir maliyet olarak duruyor.
+    private static let structuralDelimiters = Set("/:@.")
+
     static func isHighEntropyToken(_ text: String) -> Bool {
         // Tek parça, uzun, hem harf hem rakam içeren diziler: API anahtarları
         // ve oturum jetonları böyle görünür, normal cümleler görünmez.
         guard !text.contains(" "), text.count >= 24 else { return false }
+        guard !text.contains(where: structuralDelimiters.contains) else { return false }
         let hasLetter = text.contains(where: \.isLetter)
         let hasDigit = text.contains(where: \.isNumber)
         guard hasLetter, hasDigit else { return false }

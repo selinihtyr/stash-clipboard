@@ -16,3 +16,12 @@ import Store
 @Test func nonLinkHighEntropyTokenIsStillMasked() {
     #expect(shouldMask(kind: .text, text: "ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"))
 }
+
+// I4: `file` birinci sınıf bir klip türü ve `shouldMask` yalnızca `.link`i
+// muaf tutuyordu; Finder'dan sürüklenen bir ekran görüntüsü yolu "yüksek
+// entropili jeton" gibi görünüp maskeleniyordu — dosya yolu sır değil,
+// kullanıcının kartlar arasında ayrım yapabilmesi için okuyabilmesi gerekir.
+@Test func fileClipTextIsNeverMasked() {
+    let path = "/Users/selin/Downloads/IMG_20260804_113355.png"
+    #expect(!shouldMask(kind: .file, text: path))
+}

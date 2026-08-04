@@ -46,3 +46,30 @@ import Testing
 @Test func luhnInvalidSixteenDigitNumberIsNotMasked() {
     #expect(!SensitivePatterns.isSensitive("1234567812345678"))
 }
+
+// I4: eski kural (24+ karakter, harf+rakam, 12+ ayrı karakter) sıradan
+// geliştirici dizelerini de "yüksek entropili jeton" sanıyordu. Yol/URL/DSN
+// ayraçları ("/", ":", "@", ".") artık bunu eliyor — gerçek jetonlar bu
+// karakterleri kullanmıyor.
+
+@Test func aFilesystemPathIsNotMasked() {
+    #expect(!SensitivePatterns.isSensitive("/Users/selin/Downloads/IMG_20260804_113355.png"))
+}
+
+@Test func aGitBranchNameIsNotMasked() {
+    #expect(!SensitivePatterns.isSensitive("feat/stash-v1-rebase-2026"))
+}
+
+@Test func aDatabaseDSNIsNotMasked() {
+    #expect(!SensitivePatterns.isSensitive("postgres://user:pw@localhost:5432/db"))
+}
+
+@Test func anAPIKeyShapedStringIsStillMasked() {
+    #expect(SensitivePatterns.isSensitive("sk-ant-api03-AbCdEf123456789xyz"))
+}
+
+@Test func aFortyCharacterHexGitSHAStillMasksAsAnAcceptedCost() {
+    // Ayraç kuralı bunu elemez (yalnızca onaltılık karakterler, ayraç yok);
+    // bu, fix round 1'de zaten onaylanmış bilinçli bir maliyet olarak duruyor.
+    #expect(SensitivePatterns.isSensitive("36b4497aa1c3de9074f2b8c1e5a6d3f90b1c2e47"))
+}
