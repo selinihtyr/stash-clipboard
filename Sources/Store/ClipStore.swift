@@ -38,15 +38,40 @@ public final class ClipStore {
         }
         do {
             try exec("PRAGMA journal_mode=WAL;")
+            // Şema okunabilir olsa bile veri sayfaları bozuk olabilir (çökme,
+            // elektrik kesintisi ortasında yarım kalmış bir yazma) — bu,
+            // "dosya hiç açılmıyor" değil, gerçek dünyadaki yaygın senaryo.
+            // quick_check sayfaları tarar; integrity_check'in tam indeks
+            // doğrulaması olmadan, birkaç bin satırlık bir geçmişte
+            // milisaniyeler sürer.
+            try checkIntegrity()
             try createSchema()
         } catch {
             // Bozuk dosyayı silmiyoruz: kullanıcının verisi olabilir ve
             // kurtarma denemesi bize değil ona ait.
             sqlite3_close(db); db = nil
-            let backup = directory.appendingPathComponent(
-                "stash-bozuk-\(Int(Date().timeIntervalSince1970)).sqlite")
-            try? fm.moveItem(
-                at: directory.appendingPathComponent("stash.sqlite"), to: backup)
+            let corrupt = directory.appendingPathComponent("stash.sqlite")
+            // Adı şansa değil inşaya bırakıyoruz: aynı saniyede ikinci bir
+            // kurtarma (ör. art arda başarısız başlatmalar) zaman damgasını
+            // çakıştırırdı; moveItem hedefin üstüne yazmayı reddeder, dosya
+            // yerinde kalır ve altındaki PRAGMA/createSchema aynı hatayla
+            // tekrar patlayıp init'i anlaşılmaz bir şekilde düşürürdü. Hedefi
+            // önceden boş olduğunu doğrulayarak seçmek bu çakışmayı bütünüyle
+            // ortadan kaldırıyor.
+            let backup = Self.freeBackupURL(in: directory,
+                timestamp: Int(Date().timeIntervalSince1970), fm: fm)
+            do {
+                try fm.moveItem(at: corrupt, to: backup)
+            } catch let moveError {
+                // Taşıma gerçekten başarısız olduysa (izin, salt-okunur disk…)
+                // aynı yoldan tekrar açmayı denemek bozuk dosyayı geri
+                // okuyup PRAGMA'nın ilgisiz görünen bir hatayla patlamasına
+                // yol açardı. Burada dürüst ve özel bir hatayla duruyoruz;
+                // AppDelegate bunu presentFatal ile gösterip sonlandırır —
+                // sessiz bir "boş açıldı" yalanından iyisi budur.
+                throw StoreError.openFailed(
+                    "Bozuk veritabanı (\(error)) kenara alınamadı: \(moveError)")
+            }
             // WAL modu veritabanını üç dosyaya böler (.sqlite, -wal, -shm).
             // Ana dosyayı taşıyıp bunları yerinde bırakırsak taze açılan
             // veritabanı onları kendi write-ahead log'u sanıp bozuk içeriği
@@ -68,6 +93,34 @@ public final class ClipStore {
     }
 
     deinit { sqlite3_close(db) }
+
+    /// Zaman damgalı ad okunurluk için (klasöre bakan biri "bu benim eski,
+    /// bozuk geçmişim" desin diye); ama tekliği ada değil, hedefin boş
+    /// olduğunun önceden doğrulanmasına dayandırıyoruz — aynı saniyede iki
+    /// kurtarma olsa da moveItem asla bir öncekinin üstüne yazmaz.
+    private static func freeBackupURL(in directory: URL, timestamp: Int, fm: FileManager) -> URL {
+        var candidate = directory.appendingPathComponent("stash-bozuk-\(timestamp).sqlite")
+        var attempt = 2
+        while fm.fileExists(atPath: candidate.path) {
+            candidate = directory.appendingPathComponent("stash-bozuk-\(timestamp)-\(attempt).sqlite")
+            attempt += 1
+        }
+        return candidate
+    }
+
+    /// PRAGMA quick_check bir tablo değil, "ok" ya da hata satırları
+    /// döndürür. exec (sqlite3_exec) sonucu bize vermiyor, bu yüzden
+    /// prepare/step kullanıyoruz.
+    private func checkIntegrity() throws {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "PRAGMA quick_check;", -1, &stmt, nil) == SQLITE_OK else {
+            throw StoreError.queryFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_step(stmt) == SQLITE_ROW, column(stmt, 0) == "ok" else {
+            throw StoreError.queryFailed("quick_check bütünlük sorunu bildirdi")
+        }
+    }
 
     private func createSchema() throws {
         try exec("""
