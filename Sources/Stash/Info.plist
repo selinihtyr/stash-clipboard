@@ -13,5 +13,16 @@
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHumanReadableCopyright</key><string>MIT licensed</string>
+  <!-- Ekran görüntüsü izleyici opt-in (varsayılan kapalı, bkz. Ayarlar >
+       Ekran görüntüleri): açıldığında Masaüstü/Belgeler için TCC izin
+       istemi tetikler. Bu anahtarlar sistemin gösterdiği istemdeki metni
+       özelleştirir; anahtar olmadan da özellik çalışır, sadece istem daha
+       genel bir metin gösterir. -->
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>Yeni ekran görüntülerini pano geçmişine eklemek için ekran görüntüsü klasörünü okur. Yalnızca ayarlardan bu özelliği açtığında kullanılır.</string>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>Ekran görüntüsü klasörün Belgeler altına ayarlıysa, yeni ekran görüntülerini pano geçmişine eklemek için orayı okur. Yalnızca ayarlardan bu özelliği açtığında kullanılır.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>Ekran görüntüsü klasörün İndirilenler altına ayarlıysa, yeni ekran görüntülerini pano geçmişine eklemek için orayı okur. Yalnızca ayarlardan bu özelliği açtığında kullanılır.</string>
 </dict>
 </plist>

@@ -129,6 +129,32 @@ struct SettingsView: View {
                 Text("Panodan yeni bir şey kaydedilince ve bir kart öndeki uygulamaya yapıştırılınca, birbirinden farklı iki kısa ses duyulur.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Ekran görüntüleri") {
+                // `onChange` (AppDelegate.openSettings kapanışı) senkron
+                // çalışır: izin ilk kez BURADA istenir. Reddedilirse
+                // `AppDelegate` `settingsStore.settings`i (ayrı bir `@State`
+                // kopyası değil, bu view'ın da okuduğu AYNI paylaşılan nesne)
+                // gerçek duruma geri döndürür — `get:` bir sonraki çizimde
+                // bunu kendiliğinden görür, "Açılışta başlat"ın `@State`
+                // anlık görüntüsünün aksine burada elle yeniden okumaya
+                // gerek yok (görev kuralı: "@State anlık görüntüsü YOK").
+                Toggle("Ekran görüntüsü klasörünü izle", isOn: Binding(
+                    get: { settings.screenshotWatchEnabled },
+                    set: { newValue in
+                        settings.screenshotWatchEnabled = newValue
+                        onChange(settings)
+                    }))
+                Text("""
+                    ⌘⇧4 gibi kısayollar ekran görüntüsünü panoya hiç \
+                    uğratmadan doğrudan diske yazar; bu anahtar açıkken Stash \
+                    o klasörü de izleyip yeni ekran görüntülerini panodan \
+                    kopyalanmış gibi geçmişe ekler. Yalnızca gerçek ekran \
+                    görüntüleri alınır, klasördeki başka dosyalara \
+                    dokunulmaz. Klasöre erişim izni gerekir; izin \
+                    reddedilirse anahtar kendiliğinden kapanır.
+                    """)
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Kısayol") {
                 HStack {
                     LabeledContent("Şeridi aç", value: settings.combo.displayString)

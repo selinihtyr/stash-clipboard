@@ -30,6 +30,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var store: ClipStore?
     private var capture: ClipCapture?
     private var settingsController: SettingsWindowController?
+    // Opt-in, varsayılan kapalı (görev kuralı 8) — `applicationDidFinishLaunching`
+    // yalnızca `settingsStore.settings.screenshotWatchEnabled` açıksa `start()`
+    // çağırır. Nesne yine de her zaman kuruluyor: kapalıyken bile Ayarlar'dan
+    // sonradan açılabilmesi gerekiyor (bkz. `reconcileScreenshotWatcher`).
+    private var screenshotWatcher: ScreenshotWatcher?
     // `lazy`: varsayılan değer `self.settingsStore`a bakıyor, bir stored
     // property initializer'ı `self`e henüz erişemez — bkz. Swift'in
     // property initialization sırası. `settingsStore` yukarıda zaten
@@ -104,6 +109,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             coordinator.start()
             self.coordinator = coordinator
+
+            // Görev "Why": ⌘⇧4 pano'ya hiç uğramadan doğrudan diske yazar,
+            // `capture` bunu asla göremez — bu ayrı izleyici o boşluğu
+            // kapatıyor. Nesne her zaman kuruluyor (kapalıyken bile Ayarlar
+            // penceresi sonradan `start()` çağırabilsin diye), ama yalnızca
+            // ayar açıksa hemen başlatılıyor.
+            let watcher = ScreenshotWatcher(store: store)
+            watcher.onIngest = { [weak self] in try? self?.model?.reload() }
+            watcher.onIngestSound = { [weak self] in self?.soundFeedback.captured() }
+            watcher.onStatusChange = { [weak self] status in
+                self?.handleScreenshotWatchStatusChange(status)
+            }
+            self.screenshotWatcher = watcher
+            if settingsStore.settings.screenshotWatchEnabled {
+                watcher.start()
+            }
         } catch {
             presentFatal(error)
             return
@@ -252,9 +273,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // incelemesinden Task 13'e taşınan bulgu).
                 self.capture?.updatePolicy(CapturePolicy(blockedBundleIDs: finalSettings.blockedBundleIDs))
                 self.model?.settings = finalSettings
+
+                // Anahtar burada AÇIK/KAPALI değişmiş olabilir — izleyiciyi
+                // gerçek isteğe göre başlat/durdur. `start()` senkron:
+                // izin daha önce hiç sorulmadıysa BURADA (Ayarlar
+                // penceresindeki tıklamayla aynı anda) bir TCC istemi
+                // gösterir, tıpkı `LoginItem.setEnabled`ın yaptığı gibi.
+                self.reconcileScreenshotWatcher(desired: finalSettings.screenshotWatchEnabled)
             }
         settingsController = controller
         controller.present()
+    }
+
+    /// Ayarlar penceresinden gelen isteği izleyicinin gerçek durumuna
+    /// uygular. `start()`ın kendisi `stop()`u önce çağırdığı için burada
+    /// zaten çalışıyorken tekrar `start()` çağırmak (ör. kısayol değişikliği
+    /// gibi ilgisiz bir ayar güncellemesi bu closure'ı her tetiklediğinde)
+    /// zararsız ama gereksiz olurdu — yalnızca durum gerçekten "izlemiyor"sa
+    /// (kapalı/klasör-yok/izin-reddedildi) yeniden deniyoruz.
+    private func reconcileScreenshotWatcher(desired: Bool) {
+        guard let watcher = screenshotWatcher else { return }
+        if desired {
+            if case .watching = watcher.status {} else { watcher.start() }
+        } else {
+            watcher.stop()
+        }
+    }
+
+    /// `ScreenshotWatcher.onStatusChange`e bağlanır. Yalnızca izin reddi
+    /// ilgimizi çekiyor: anahtar zaten kapalıysa (kullanıcı kendi kapattı)
+    /// ya da klasör geçici olarak yok (harici disk bağlı değil vb.) burada
+    /// yapılacak bir şey yok — `folderMissing` sessizce beklemeye devam
+    /// eder, klasör geri gelirse `tick()` kendiliğinden toparlanır.
+    ///
+    /// Görev kuralı 7: izin reddedilirse özellik sessizce çalışmıyormuş gibi
+    /// görünmemeli. `LoginItem.setEnabled` başarısızlığının Ayarlar'a
+    /// yansıtılma şekliyle AYNI desen — anahtarı gerçek duruma (kapalı)
+    /// geri döndürüp diske yazıyoruz, sonra görünür bir uyarı gösteriyoruz.
+    private func handleScreenshotWatchStatusChange(_ status: ScreenshotWatchStatus) {
+        guard status == .permissionDenied, settingsStore.settings.screenshotWatchEnabled else { return }
+        var updated = settingsStore.settings
+        updated.screenshotWatchEnabled = false
+        settingsStore.settings = updated
+        updated.save()
+        let alert = NSAlert()
+        alert.messageText = "Ekran görüntüsü klasörüne erişilemedi"
+        alert.informativeText = """
+            Stash'in ekran görüntüsü klasörünü okuyabilmesi için izin gerekiyor. \
+            Sistem Ayarları'ndan izin verip anahtarı yeniden açabilirsin.
+            """
+        alert.addButton(withTitle: "Sistem Ayarları'nı aç")
+        alert.addButton(withTitle: "Tamam")
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSWorkspace.shared.open(URL(string:
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!)
+        }
     }
 
     @objc func toggleStrip() {

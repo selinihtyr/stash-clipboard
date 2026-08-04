@@ -59,48 +59,33 @@ public final class CaptureCoordinator {
         let front = NSWorkspace.shared.frontmostApplication
         guard let captured = capture.poll(frontmostBundleID: front?.bundleIdentifier) else { return }
         do {
-            // Var olan satırı ID'siyle birlikte alıyoruz: bir satır zaten
-            // varsa dosyayı onun ID'siyle adlandırıp yeniden yazıyoruz (yeni
-            // bir ID ile yazmak, upsert contentHash'e göre eski satırı
-            // güncelleyeceği için hiçbir satırın adlandırmadığı bir dosya
-            // bırakırdı — tam da bu fonksiyonun kaçınmaya çalıştığı orphan).
-            let existing = try store.find(contentHash: captured.contentHash)
-            let id = existing?.id ?? UUID()
-            var imagePath = existing?.imagePath
-            // Dosya gerçekten yazılmalı mı? Satır hiç yoksa (ilk yakalama)
-            // ya da satır var ama dosyası yok (budanmış — I3: `imagePath`
-            // NULL'a düşmüş — ya da diskten elle silinmiş) evet; satır zaten
-            // geçerli bir dosyaya işaret ediyorsa hayır — burada yeniden
-            // yazmak, hiçbir satırın işaret etmediği bir dosya bırakmaz ama
-            // gereksiz bir yazma+orphan riski de taşımaz (asıl orphan
-            // korumasının nedeni buydu, C3/pruneImages'ın üstündeki gerekçeye
-            // bkz.) — o korumayı burada da koruyoruz.
-            let fileMissing = imagePath.map { !FileManager.default.fileExists(atPath: $0) } ?? true
-            // Diske yazma satır eklemeden/güncellemeden önce olmalı: yazma
-            // başarısız olursa hiç var olmayan bir dosyaya işaret eden satır
-            // oluşmaz/güncellenmez.
-            if fileMissing, let data = captured.imageData {
-                let url = store.imagesDirectory.appendingPathComponent("\(id.uuidString).png")
-                try data.write(to: url)
-                imagePath = url.path
-                // Küçük resim türetilmiş bir dosya, orijinalin yerini tutmaz:
-                // üretimi başarısız olsa da (ör. çözülemeyen veri) yakalama
-                // hâlâ başarılı sayılır — kart o zaman orijinali kendisi
-                // çözer (bkz. ClipCardView), daha yavaş ama klip kaybolmaz.
-                if let thumbData = ThumbnailGenerator.makeJPEG(from: data) {
-                    let thumbURL = store.thumbsDirectory.appendingPathComponent("\(id.uuidString).jpg")
-                    try? thumbData.write(to: thumbURL)
-                }
+            // Görsel yolu artık `ImageClipWriter`e taşındı (bkz. o dosyadaki
+            // gerekçe): var olan satırı ID'siyle birlikte bulup dosyayı
+            // gerektiğinde yeniden yazan, `ScreenshotWatcher`in de aynen
+            // paylaştığı tek yer — orphan-önleme sırasının iki çağıranda da
+            // ayrı ayrı doğru tutulması umuduna kalmıyor.
+            if captured.kind == .image, let data = captured.imageData {
+                try ImageClipWriter(store: store).write(
+                    imageData: data, contentHash: captured.contentHash,
+                    sourceBundleID: front?.bundleIdentifier, sourceName: front?.localizedName)
+            } else {
+                // Metin/bağlantı/dosya klipleri: ID'yi yalnızca var olan bir
+                // satır varsa onunkiyle yeniden kullanıyoruz (upsert zaten
+                // contentHash'e göre UPDATE dener, INSERT sadece hiçbir satır
+                // güncellenmediğinde devreye girer — bu durumda `id` gerçekte
+                // sadece o INSERT dalında kullanılır).
+                let existing = try store.find(contentHash: captured.contentHash)
+                let id = existing?.id ?? UUID()
+                try store.upsert(Clip(
+                    id: id, createdAt: Date(),
+                    kind: ClipKind(rawValue: captured.kind.rawValue) ?? .text,
+                    text: captured.text, imagePath: nil,
+                    sourceBundleID: front?.bundleIdentifier,
+                    sourceName: front?.localizedName,
+                    pinned: false, shelfID: nil,
+                    contentHash: captured.contentHash,
+                    byteSize: captured.text?.utf8.count ?? 0))
             }
-            try store.upsert(Clip(
-                id: id, createdAt: Date(),
-                kind: ClipKind(rawValue: captured.kind.rawValue) ?? .text,
-                text: captured.text, imagePath: imagePath,
-                sourceBundleID: front?.bundleIdentifier,
-                sourceName: front?.localizedName,
-                pinned: false, shelfID: nil,
-                contentHash: captured.contentHash,
-                byteSize: captured.imageData?.count ?? (captured.text?.utf8.count ?? 0)))
             // `lastPruneAt == nil`: açılıştan beri hiç budanmadı — açılışta
             // bir kez KOŞULSUZ çalıştır (bkz. sınıf üstündeki gerekçe).
             // Sonrasında yalnızca aralık dolunca — ara ticklerde tamamen

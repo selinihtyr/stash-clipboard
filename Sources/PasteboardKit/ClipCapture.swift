@@ -149,7 +149,16 @@ public final class ClipCapture {
     /// Kind, hash'e dahil edilir: ham baytları aynı olan ama farklı türden içerik
     /// (ör. bir dosya yolu string'i == bir metin kopyası) aynı hash'e düşüp
     /// Store.upsert'te sessizce birleşmesin.
-    static func hash(_ kind: CapturedKind, _ data: Data) -> String {
+    ///
+    /// `public`: `StashCore`deki `ScreenshotWatcher` da AYNI algoritmayı
+    /// kullanmak zorunda — ekran görüntüsü klasöründen gelen bir PNG,
+    /// panodan kopyalanan AYNI PNG ile birebir aynı contentHash'e düşmezse
+    /// `ClipStore.upsert`in contentHash'e göre birleştirme sözleşmesi (görev
+    /// kuralı 6: "aynı görsel iki satır açmamalı") burada sessizce kırılırdı.
+    /// Tek fonksiyon, tek doğruluk kaynağı — iki modülün aynı hash'i
+    /// birbirinden habersiz yeniden yazıp er ya da geç birbirinden sapması
+    /// riskini ortadan kaldırıyor.
+    public static func hash(_ kind: CapturedKind, _ data: Data) -> String {
         var payload = Data((kind.rawValue + ":").utf8)
         payload.append(data)
         return SHA256.hash(data: payload).map { String(format: "%02x", $0) }.joined()

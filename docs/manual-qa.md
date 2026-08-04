@@ -40,6 +40,28 @@ Otomatik test edilemeyen davranışlar. Her sürümden önce gerçek makinede.
       dene. Kayıt başarısız olursa bir hata penceresi çıkmalı ve anahtar
       açık göstermemeli.
 
+## Ekran görüntüsü klasörü izleme
+- [ ] Ayarlar'da "Ekran görüntüsü klasörünü izle"yi ilk kez aç. Bir izin
+      istemi çıkmalı (Masaüstü/Belgeler için).
+- [ ] İzni ver, ⌘⇧4 (ya da ⇧⌘4) ile bir ekran görüntüsü al. Bir kart olarak
+      geçmişe düşmeli; kaynağı "Ekran görüntüsü" yazmalı, `loginwindow`
+      değil.
+- [ ] Aynı görüntüyü sonra panoya kopyala (ör. Önizleme'de aç, ⌘A, ⌘C).
+      Geçmişte İKİ kart değil, aynı kart görünmeye devam etmeli.
+- [ ] Masaüstüne (ya da ayarlı klasöre) sıradan bir PNG/ekran görüntüsü
+      OLMAYAN bir dosya bırak. Geçmişe düşmemeli.
+- [ ] İzni reddet (ya da `tccutil reset SystemPolicyDesktopFolder
+      social.selin.stash` ile sıfırlayıp yeniden dene). Anahtar
+      kendiliğinden kapanmalı, görünür bir uyarı çıkmalı — sessizce "açık"
+      görünüp arka planda çalışmayan bir anahtar kalmamalı.
+- [ ] `defaults write com.apple.screencapture location ~/Downloads`
+      (ardından `killall SystemUIServer`) ile ekran görüntüsü hedefini
+      değiştir, Stash'i yeniden başlatmadan tekrar ⌘⇧4 dene. Yeni klasörden
+      yakalamalı.
+      (Bitince `defaults delete com.apple.screencapture location` ile geri al.)
+- [ ] Anahtarı kapat. O andan sonra alınan ekran görüntüleri geçmişe
+      düşmemeli.
+
 ## Veri
 - [ ] Şifre yöneticisinden bir parola kopyala. Geçmişte görünmemeli.
 - [ ] Bir kart numarası kopyala. Kartta maskeli görünmeli.

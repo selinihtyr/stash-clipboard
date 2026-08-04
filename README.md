@@ -6,6 +6,31 @@ yapıştırır.
 
 ## Gizlilik
 
+- **Varsayılan olarak yalnızca panoyu izler.** Ekran görüntüsü klasörünü
+  izleme (aşağıda) İSTEĞE BAĞLI ve varsayılan KAPALI — açık kaynağın
+  doğrulayabileceği tek gerçek davranış budur, bu bölümün geri kalanı da
+  panonun ötesine geçen tek özelliği anlatıyor.
+- **Ekran görüntüsü klasörünü izleme — yalnızca açarsan.** ⌘⇧4 gibi
+  kısayollar ekran görüntüsünü panoya hiç uğratmadan doğrudan diske yazar;
+  Stash panoyu yoklayarak çalıştığı için bunu normalde hiç göremez. Ayarlar
+  → "Ekran görüntüsü klasörünü izle" anahtarını (varsayılan KAPALI) açarsan
+  Stash, macOS'un ekran görüntülerini kaydettiği klasörü de izler (genelde
+  Masaüstü, ama `defaults write com.apple.screencapture location …` ile
+  değiştirilmiş olabilir) ve yeni ekran görüntülerini panodan kopyalanmış
+  gibi geçmişe ekler. Üç sınır:
+  - Klasördeki BAŞKA dosyalara hiç dokunulmaz: dosya adına değil, macOS'un
+    gerçek ekran görüntülerini damgaladığı (belgesiz ama `mdls -name
+    kMDItemIsScreenCapture` ile doğrulanabilir) Spotlight özniteliğine
+    bakılır. Bu belirlenemeyen bir dosya varsayılan olarak İÇE
+    AKTARILMAZ.
+  - Yalnızca izleme BAŞLADIKTAN SONRA oluşan dosyalar sayılır — anahtarı
+    ilk açtığında klasörde duran yıllar öncesine ait ekran görüntüleri
+    geçmişe akmaz.
+  - Bu klasör macOS'ta izin korumalıdır (Masaüstü/Belgeler/İndirilenler):
+    ilk okuma bir sistem izin istemi tetikler; reddedersen anahtar
+    kendiliğinden kapanır ve bunu görünür bir uyarıyla söyler — sessizce
+    "açık" görünüp arka planda çalışmayan bir anahtar bırakmaz. Anahtar
+    kapalıyken bu klasöre asla dokunulmaz.
 - **Ağ kodu yok.** Uygulama hiçbir sunucuya bağlanmaz. Kaynakta `URLSession`,
   `Network` veya soket kullanımı bulamazsınız — arayarak doğrulayabilirsiniz
   (`grep -rn "URLSession\|import Network\|CFSocket\|NWConnection" Sources`
@@ -85,6 +110,12 @@ Kaynaktan her yeniden derlemeden sonra bu izni yeniden vermeniz gerekebilir
 
 Global kısayol için izin gerekmez (Carbon `RegisterEventHotKey` kullanılır,
 Erişilebilirlik izleyicisi değil).
+
+Ekran görüntüsü klasörünü izleme İSTEĞE BAĞLI (Ayarlar'da varsayılan
+KAPALI) ve açıldığında ayrı bir **Dosyalar ve Klasörler** izni gerektirir
+(Masaüstü/Belgeler/İndirilenler — Sistem Ayarları → Gizlilik ve Güvenlik).
+İzin vermezseniz anahtar kendiliğinden kapanır ve bunu bir uyarı penceresiyle
+söyler; sessizce "açık" görünüp arka planda çalışmaz.
 
 ## Açılışta başlat
 
