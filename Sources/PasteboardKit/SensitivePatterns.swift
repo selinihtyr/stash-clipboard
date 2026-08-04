@@ -136,11 +136,30 @@ public enum SensitivePatterns {
     }
 
     /// Tek bir yol/URL parçasının kendi başına bir jeton gibi görünüp
-    /// görünmediği — genel yüksek-entropi kuralıyla aynı eşikler, ama tek
-    /// bir segmente uygulanıyor.
+    /// görünmediği — iki bağımsız sinyal, ikisi de yeterli:
+    ///
+    /// 1) Eski kural: 24+ karakter, harf+rakam karışımı, 12+ ayrı karakter.
+    ///    Uzun tanımlayıcıları yakalar ama bir "/" tam ortadan bölünce her
+    ///    iki yarı da bu eşiğin altına düşebilir (BLOCKING bulgu): 40
+    ///    karakterlik bir sırrın ortasına tek bir "/" koymak her iki
+    ///    yarıyı da "jeton değil" gösterip yapısal muafiyeti kandırıyordu
+    ///    — Monte Carlo ölçümü rastgele base64 dizelerinin %13-47'sinin bu
+    ///    yüzden düz metin kaldığını gösterdi.
+    /// 2) Yeni sinyal: büyük/küçük harf VE rakam karışımı, ama 40 karakter
+    ///    EŞİTLİĞİ olmadan, 14 karakter gibi daha kısa bir eşikle — AWS
+    ///    gizli anahtarı tespitçisinin (aşağıda `isKnownCredential`) zaten
+    ///    tam bu sinyale güvendiğinin aynısı, sadece segment başına ve
+    ///    uzunluk eşitliği koşulu olmadan uygulanıyor. Sıradan yapılandırılmış
+    ///    tanımlayıcı parçaları (tarih, sürüm, dal adı) neredeyse hiç bu
+    ///    kısalıkta üç türü birden karıştırmaz.
     private static func isTokenShapedSegment(_ segment: String) -> Bool {
-        segment.count >= 24 && segment.contains(where: \.isLetter)
-            && segment.contains(where: \.isNumber) && Set(segment.lowercased()).count >= 12
+        if segment.count >= 24, segment.contains(where: \.isLetter),
+           segment.contains(where: \.isNumber), Set(segment.lowercased()).count >= 12 {
+            return true
+        }
+        guard segment.count >= 14 else { return false }
+        return segment.contains(where: \.isUppercase) && segment.contains(where: \.isLowercase)
+            && segment.contains(where: \.isNumber)
     }
 
     static func isHighEntropyToken(_ text: String) -> Bool {

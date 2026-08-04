@@ -141,3 +141,28 @@ import Testing
 @Test func aDatabaseDSNIsStillVisibleAfterTheFix() {
     #expect(!SensitivePatterns.isSensitive("postgres://user:pw@localhost:5432/db"))
 }
+
+// Bulgu 1 (BLOCKING): isTokenShapedSegment'in genel 24 karakter eşiğini
+// yeniden kullanması, 40 karakterlik bir sırrın ortasına tek bir "/"
+// koymanın her iki yarıyı da "jeton gibi değil" hale getirmesi anlamına
+// geliyordu — `refish` yapısal muafiyeti sonra bu sahte "yol"u geçiriyordu.
+// İncelemenin doğruladığı düzeltme: segment başına, 40'a EŞİT OLMA
+// koşulu olmadan, büyük/küçük harf + rakam karışımı sinyaline dayanan
+// ikinci bir 14 karakterlik kol.
+
+@Test func aSlashBearingSecretJustOverTheOldFourteenCharSplitStillMasks() {
+    // Ortadan "/" ile bölünmüş, her iki yarısı da büyük/küçük harf+rakam
+    // karışımı taşıyan 32 karakterlik bir sır — eski kural (24+ tek
+    // parça) bunu kaçırırdı, yeni 14 karakterlik kol yakalar.
+    #expect(SensitivePatterns.isSensitive("aZ3xK9mQ2wP7v/N4tL6cJ8sB1dF5gH0y"))
+}
+
+@Test func aThirtyNineCharacterAWSSecretShapeIsStillMasked() {
+    // Tam 40 karakter tespitçisinin bir eksiği kaçırdığı durum — segment
+    // başına 14 karakterlik yeni kol bunu bağımsız olarak yakalıyor.
+    #expect(SensitivePatterns.isSensitive("OhbVrpoiVgRV5IfLBcb/fnoGMbJmTPSIAoCLrZ3"))
+}
+
+@Test func aFortyOneCharacterAWSSecretShapeIsStillMasked() {
+    #expect(SensitivePatterns.isSensitive("aWZkSBvrjn9Wvgfygw2w/MqZcUDIh7yfJs1ON43xK"))
+}
