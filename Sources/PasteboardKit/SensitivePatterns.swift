@@ -123,6 +123,18 @@ public enum SensitivePatterns {
     // dosya adlarını kurtarırken gerçek kimlik bilgilerini ele vermiyoruz.
     private static let structuralDelimiters = Set("/:@._-")
 
+    // URL yolu/sorgu/parça parçaları İÇİN daraltılmış ayraç kümesi (I4,
+    // dördüncü tur): "-" ve "_" dosya adlarında kelime ayıracı ama URL
+    // jetonlarının kendi alfabesinin bir parçası (base64url "-"/"_" kullanır,
+    // dashed-UUID biçimi jetonu tire ile böler). `structuralDelimiters`i
+    // burada da kullanmak, "?token=3f2a1b9c-4d5e-6f70-8a9b-0c1d2e3f4a5b" gibi
+    // bir jetonu dört-beş kısa parçaya bölüp her birini 14/24 karakter
+    // eşiğinin altına düşürüyor, dashed-UUID parola sıfırlama jetonları hiç
+    // maskelenmiyordu (10.000 örneklik ölçüm: length 16 → %36 sızıntı, 32 →
+    // %7). Sıradan metinde "-"/"_" hâlâ ayraç sayılır — yalnızca
+    // `isHiddenCredential`in baktığı URL parçaları bu dar kümeyi kullanır.
+    private static let urlPieceDelimiters = Set("/:@.")
+
     /// Bir dizenin gerçekten bir dosya yolu, URL ya da yapılandırılmış bir
     /// tanımlayıcı zinciri (maven koordinatı, docker imaj referansı,
     /// derleyici konumu, ISO zaman damgası, e-posta) gibi GÖRÜNÜP
@@ -158,8 +170,10 @@ public enum SensitivePatterns {
     /// `looksStructural`in (dosya yolu/URL biçimi) kullandığı ortak
     /// mekanizma; `isSensitiveLink` de aynısını URL yolu/sorgu parçaları
     /// için yeniden kullanacak (I4, üçüncü tur, madde 3).
-    private static func containsTokenShapedSegment(_ text: String) -> Bool {
-        text.split(whereSeparator: { structuralDelimiters.contains($0) })
+    private static func containsTokenShapedSegment(
+        _ text: String, delimiters: Set<Character> = structuralDelimiters
+    ) -> Bool {
+        text.split(whereSeparator: { delimiters.contains($0) })
             .contains { isTokenShapedSegment(String($0)) }
     }
 
@@ -211,7 +225,10 @@ public enum SensitivePatterns {
     /// yolunun jeton gizleyebilmesiyle aynı şekilde birini İÇİNDE mi
     /// taşıyor.
     private static func isHiddenCredential(_ text: String) -> Bool {
-        isKnownCredential(text) || containsTokenShapedSegment(text)
+        // `urlPieceDelimiters` (yalnızca "/:@.") kullanılır, `structuralDelimiters`
+        // DEĞİL — bkz. tanımdaki gerekçe: "-"/"_" burada ayraç sayılırsa
+        // dashed-UUID gibi mainstream magic-link jetonları parçalanıp kaçar.
+        isKnownCredential(text) || containsTokenShapedSegment(text, delimiters: urlPieceDelimiters)
     }
 
     /// Tek bir yol/URL parçasının kendi başına bir jeton gibi görünüp

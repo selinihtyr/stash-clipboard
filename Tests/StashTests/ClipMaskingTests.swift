@@ -87,3 +87,20 @@ import Store
     #expect(shouldMask(kind: .link, text: link))
 }
 
+// I4, dördüncü tur, madde 3: URL yolu/sorgu parçalarını `structuralDelimiters`
+// ("-"/"_" dahil) yerine daraltılmış `urlPieceDelimiters` ("/:@." — tire ve
+// alt çizgi HARİÇ) ile bölmek, dashed-UUID gibi mainstream parola sıfırlama
+// jeton biçimlerini yakalıyor — tire artık jetonu parçalamıyor.
+
+@Test func aDashedUUIDResetTokenLinkIsMasked() {
+    let link = "https://app.example.com/reset/3f2a1b9c-4d5e-6f70-8a9b-0c1d2e3f4a5b"
+    #expect(shouldMask(kind: .link, text: link))
+}
+
+@Test func aBareLinkWithHyphenatedWordsInThePathStaysLegible() {
+    // Sıradan bir blog/döküman yolu: tire kelime ayıracı olarak kullanılıyor,
+    // jeton taşımıyor — daraltılmış ayraç kümesi bunu maskelemeye başlamamalı.
+    let link = "https://example.com/blog/how-to-bake-sourdough-bread-at-home"
+    #expect(!shouldMask(kind: .link, text: link))
+}
+
