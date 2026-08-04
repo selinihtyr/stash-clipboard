@@ -8,14 +8,16 @@ import PasteEngine
 final class RecordingWriter: PasteWriting {
     var lastText: String?
     var lastImage: Data?
+    var lastFileURL: URL?
     var changeCount = 0
     func writeText(_ text: String, plainOnly: Bool) -> Int {
         lastText = text
         changeCount += 1
         return changeCount
     }
-    func writeImage(_ data: Data) -> Int {
+    func writeImage(_ data: Data, fileURL: URL) -> Int {
         lastImage = data
+        lastFileURL = fileURL
         changeCount += 1
         return changeCount
     }
@@ -193,6 +195,58 @@ private func makeModel(_ texts: [String]) throws -> (StripModel, ClipStore, Reco
     var attempt: StripModel.PasteAttempt?
     model.attemptPaste(applyingFilters: false, restoreFocus: immediateFocusRestoration) { attempt = $0 }
     #expect(attempt == .nothingSelected)
+}
+
+@MainActor @Test func pastingASelectedImageCardSendsTheBytesAndTheFilesRealLocation() throws {
+    // Görev raporundaki asıl senaryo: bir görsel klip yapıştırılınca artık
+    // yalnızca ham baytlar değil, dosyanın diskteki gerçek konumu da
+    // gitmeli — Terminal gibi metin-yalnız bir hedef bunu yol olarak alsın.
+    let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("stash-core-\(UUID().uuidString)")
+    let store = try ClipStore(directory: dir)
+    let imageDir = dir.appendingPathComponent("images", isDirectory: true)
+    try FileManager.default.createDirectory(at: imageDir, withIntermediateDirectories: true)
+    let imageFile = imageDir.appendingPathComponent("real.png")
+    let bytes = Data([0x89, 0x50, 0x4E, 0x47])
+    try bytes.write(to: imageFile)
+
+    try store.insert(Clip(id: UUID(), createdAt: Date(), kind: .image, text: nil,
+                          imagePath: imageFile.path, sourceBundleID: nil, sourceName: nil,
+                          pinned: false, shelfID: nil, contentHash: "real-img", byteSize: bytes.count))
+    let writer = RecordingWriter()
+    let model = StripModel(store: store,
+                           engine: PasteEngine(pasteboard: writer, keystrokes: TrustedKeys()),
+                           settings: .defaults)
+    try model.reload()
+
+    var outcome: PasteOutcome?
+    model.pasteSelected(applyingFilters: false, restoreFocus: immediateFocusRestoration) { outcome = $0 }
+    #expect(writer.lastImage == bytes)
+    #expect(writer.lastFileURL == URL(fileURLWithPath: imageFile.path))
+    #expect(outcome == .pastedIntoFrontmostApp)
+}
+
+@MainActor @Test func pastingASelectedLinkCardIsUnaffectedByTheImagePathChange() throws {
+    // Bağlantı klipleri `.image` dalına hiç girmiyor — bu değişiklik yalnızca
+    // görsel dalını genişletti, metin/bağlantı yolu aynı `engine.paste(text:)`
+    // çağrısından geçmeye devam ediyor.
+    let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("stash-core-\(UUID().uuidString)")
+    let store = try ClipStore(directory: dir)
+    let link = "https://example.com/a?b=1"
+    try store.insert(Clip(id: UUID(), createdAt: Date(), kind: .link, text: link,
+                          imagePath: nil, sourceBundleID: nil, sourceName: nil,
+                          pinned: false, shelfID: nil, contentHash: link, byteSize: link.utf8.count))
+    let writer = RecordingWriter()
+    let model = StripModel(store: store,
+                           engine: PasteEngine(pasteboard: writer, keystrokes: TrustedKeys()),
+                           settings: .defaults)
+    try model.reload()
+
+    model.pasteSelected(applyingFilters: false, restoreFocus: immediateFocusRestoration) { _ in }
+    #expect(writer.lastText == link)
+    #expect(writer.lastImage == nil)
+    #expect(writer.lastFileURL == nil)
 }
 
 @MainActor @Test func attemptPasteReportsNothingToPasteForAPrunedImageCard() throws {

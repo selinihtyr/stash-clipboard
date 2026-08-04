@@ -7,6 +7,7 @@ final class FakePasteboardWriter: PasteWriting {
     var lastText: String?
     var lastPlainOnly = false
     var lastImage: Data?
+    var lastFileURL: URL?
     /// Gerçek `NSPasteboard.changeCount` gibi her yazımda ilerler; I2'nin
     /// `onWrite` kancasının doğru değeri taşıdığını test edebilmek için.
     var changeCount = 0
@@ -15,8 +16,9 @@ final class FakePasteboardWriter: PasteWriting {
         changeCount += 1
         return changeCount
     }
-    func writeImage(_ data: Data) -> Int {
+    func writeImage(_ data: Data, fileURL: URL) -> Int {
         lastImage = data
+        lastFileURL = fileURL
         changeCount += 1
         return changeCount
     }
@@ -50,10 +52,16 @@ func syncPaste(_ engine: PasteEngine, text: String, filters: [PasteFilter] = [])
     return result
 }
 
+/// Testlerin çoğu gerçek dosya yoluyla ilgilenmiyor, o yüzden sabit bir
+/// `fileURL` varsayılanı var — spesifik bir yol test etmek isteyen
+/// (bkz. görsel yapıştırma testleri) kendi URL'ini geçer.
+let testImageFileURL = URL(fileURLWithPath: "/tmp/stash-test-image.png")
+
 @discardableResult
-func syncPaste(_ engine: PasteEngine, imageData: Data) -> PasteOutcome {
+func syncPaste(_ engine: PasteEngine, imageData: Data, fileURL: URL = testImageFileURL) -> PasteOutcome {
     var result: PasteOutcome!
-    engine.paste(imageData: imageData, restoreFocus: immediateFocusRestoration) { result = $0 }
+    engine.paste(imageData: imageData, fileURL: fileURL,
+                restoreFocus: immediateFocusRestoration) { result = $0 }
     return result
 }
 
@@ -125,6 +133,18 @@ func syncPaste(_ engine: PasteEngine, imageData: Data) -> PasteOutcome {
     #expect(outcome == .copiedOnlyNoAccessibilityPermission)
 }
 
+@Test func imagePasteCarriesTheFilesRealLocationToTheWriter() {
+    // Terminal gibi metin-yalnız hedefler için: yazıcı, baytların yanında
+    // dosyanın DİSKTEKİ gerçek yerini de alıyor mu? `PasteEngine` bunu
+    // kendi başına türetmiyor, yalnızca çağırandan (StripModel) aldığını
+    // `PasteWriting`e iletiyor — bu test o iletimin bozulmadığını doğruluyor.
+    let pb = FakePasteboardWriter(); let keys = FakeKeystrokes()
+    let url = URL(fileURLWithPath: "/Users/selin/Pictures/ekran-goruntusu.png")
+    syncPaste(PasteEngine(pasteboard: pb, keystrokes: keys), imageData: Data([9, 9, 9]), fileURL: url)
+    #expect(pb.lastImage == Data([9, 9, 9]))
+    #expect(pb.lastFileURL == url)
+}
+
 // MARK: - Odak geri verme sırası (bkz. PasteEngine.FocusRestoration gerekçesi)
 //
 // Kritik hata buradaydı: sentetik ⌘V, şerit paneli hâlâ key window iken
@@ -193,7 +213,7 @@ func syncPaste(_ engine: PasteEngine, imageData: Data) -> PasteOutcome {
     let pb = FakePasteboardWriter(); let keys = FakeKeystrokes()
     var sentCountWhileInsideRestoreFocus = -1
     PasteEngine(pasteboard: pb, keystrokes: keys)
-        .paste(imageData: Data([1, 2, 3]), restoreFocus: { proceed in
+        .paste(imageData: Data([1, 2, 3]), fileURL: testImageFileURL, restoreFocus: { proceed in
             sentCountWhileInsideRestoreFocus = keys.sentCount
             proceed()
         }) { _ in }

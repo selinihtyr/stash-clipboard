@@ -63,10 +63,14 @@ public final class PasteEngine {
         restoreFocus { [self] in completion(deliver()) }
     }
 
-    public func paste(imageData: Data,
+    /// `fileURL` görselin diskteki gerçek konumu — çağıran (`StripModel`)
+    /// zaten `Clip.imagePath`ten okuduğu için burada zorunlu parametre;
+    /// `PasteEngine` `Store`u hiç bilmiyor, bu yüzden yolu kendi başına
+    /// türetemez, çağırandan almak zorunda (bkz. `PasteWriting.writeImage`).
+    public func paste(imageData: Data, fileURL: URL,
                       restoreFocus: @escaping FocusRestoration,
                       completion: @escaping (PasteOutcome) -> Void) {
-        let changeCount = pasteboard.writeImage(imageData)
+        let changeCount = pasteboard.writeImage(imageData, fileURL: fileURL)
         onWrite?(changeCount)
         restoreFocus { [self] in completion(deliver()) }
     }

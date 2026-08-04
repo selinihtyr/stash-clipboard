@@ -45,7 +45,7 @@ private final class FakeSharedPasteboard: PasteboardReading, PasteWriting, @unch
         return changeCount
     }
     @discardableResult
-    func writeImage(_ data: Data) -> Int { changeCount += 1; return changeCount }
+    func writeImage(_ data: Data, fileURL: URL) -> Int { changeCount += 1; return changeCount }
 }
 
 @MainActor

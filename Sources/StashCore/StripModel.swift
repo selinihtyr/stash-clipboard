@@ -131,7 +131,8 @@ public final class StripModel: ObservableObject {
         let filters = applyingFilters ? settings.activeFilters : []
         if clip.kind == .image, let path = clip.imagePath,
            let data = FileManager.default.contents(atPath: path) {
-            engine.paste(imageData: data, restoreFocus: restoreFocus, completion: completion)
+            engine.paste(imageData: data, fileURL: URL(fileURLWithPath: path),
+                        restoreFocus: restoreFocus, completion: completion)
             return true
         }
         guard let text = clip.text else { return false }
