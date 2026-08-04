@@ -228,11 +228,20 @@ struct ClipCardView: View {
     /// bu yüzden kartın dışına çıkıp yanındaki kartın üstüne biniyordu; dikey
     /// görsellerde belli olmadığı için gözden kaçmıştı.
     @ViewBuilder private func preview(_ image: NSImage) -> some View {
-        Image(nsImage: image)
-            .resizable()
-            .scaledToFill()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
+        // Kap `Color.clear`, görsel onun ÜSTÜNE bindiriliyor.
+        //
+        // Görseli doğrudan `.frame(maxWidth: .infinity).clipped()` ile
+        // sınırlamak işe yaramıyor: maxWidth kesin bir boyut dayatmaz, yalnızca
+        // üst sınır önerir; scaledToFill kendi taşmış boyutunu bildirince
+        // çerçeve de o boyutu alır ve clipped() kesecek bir şey bulamaz.
+        // Color.clear ise önerilen boyutu olduğu gibi kabul eder, dolayısıyla
+        // kırpma gerçekten kartın alanına uygulanır.
+        Color.clear
+            .overlay(
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            )
             .clipShape(RoundedRectangle(cornerRadius: 7))
     }
 
