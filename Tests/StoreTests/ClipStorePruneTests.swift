@@ -142,6 +142,39 @@ private func imageClip(_ store: ClipStore, bytes: Int, at seconds: TimeInterval,
     #expect(!FileManager.default.fileExists(atPath: orphan.path))
 }
 
+@Test func pruneImagesSweepsOrphansEvenWellBelowTheHighWaterMark() throws {
+    // Süpürme eskiden yalnızca `size > highWater` iken çalışıyordu — üretim
+    // eşiği 2 GB, bu yüzden 2 GB'ın altında kalan bir öksüz asla süpürülmezdi.
+    // Süpürme artık eşikten BAĞIMSIZ, her çağrıda çalışıyor.
+    let store = try makeStore()
+    let orphan = store.imagesDirectory.appendingPathComponent("orphan-\(UUID().uuidString).png")
+    try Data(repeating: 0xAB, count: 500).write(to: orphan)
+    try FileManager.default.setAttributes(
+        [.modificationDate: Date().addingTimeInterval(-60)], ofItemAtPath: orphan.path)
+    _ = try store.pruneImages(highWater: 2_000_000_000, lowWater: 1_500_000_000)
+    #expect(!FileManager.default.fileExists(atPath: orphan.path))
+    #expect(try store.imagesByteSize() == 0)
+}
+
+@Test func deleteAllReclaimsOrphanFilesNoRowEverReferenced() throws {
+    // "Tümünü temizle" satırların sahip olduğu dosyaları siler ama öksüzlere
+    // (hiçbir satırın hiç işaret etmediği dosyalara) dokunmuyordu — kullanıcı
+    // geçmişini temizledikten sonra Ayarlar'daki disk rakamı hâlâ sıfırdan
+    // büyük kalıyordu ve bunu sıfırlamanın hiçbir yolu yoktu.
+    let store = try makeStore()
+    let owned = try imageClip(store, bytes: 1_000, at: 1)
+    let orphan = store.imagesDirectory.appendingPathComponent("orphan-\(UUID().uuidString).png")
+    try Data(repeating: 0xAB, count: 5_000).write(to: orphan)
+    try FileManager.default.setAttributes(
+        [.modificationDate: Date().addingTimeInterval(-60)], ofItemAtPath: orphan.path)
+    try store.deleteAll()
+    #expect(!FileManager.default.fileExists(atPath: owned.imagePath!))
+    #expect(!FileManager.default.fileExists(atPath: orphan.path))
+    #expect(try store.imagesByteSize() == 0)
+    let remaining = try FileManager.default.contentsOfDirectory(atPath: store.imagesDirectory.path)
+    #expect(remaining.isEmpty)
+}
+
 @Test func pruneImagesDoesNotSweepAFreshlyWrittenOrphanFile() throws {
     // Karşıt durum: CaptureCoordinator.tick() görseli satırdan ÖNCE yazıyor;
     // o pencerede pruneImages çağrılırsa (bugünkü tek çağrı yolunda

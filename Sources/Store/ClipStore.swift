@@ -342,6 +342,15 @@ public final class ClipStore {
         let affected = try query("SELECT * FROM clips WHERE pinned = 0")
         try exec("DELETE FROM clips WHERE pinned = 0;")
         removeFiles(for: affected)
+        // `removeFiles` yalnızca SİLDİĞİMİZ satırların sahip olduğu dosyaları
+        // kaldırır — hiçbir satırın hiç işaret etmediği öksüz dosyalar (ör.
+        // daha önce budanmış, ama satırı da silinmiş; ya da yarım kalmış bir
+        // yakalama) burada dokunulmadan kalırdı. "Tümünü temizle" kullanıcıya
+        // sıfırlanmış bir disk figürü vaat ediyor; öksüzleri de süpürmeden bu
+        // vaat tutulmaz (bkz. sweepOrphanFiles üstündeki gerekçe — eskiden bu
+        // yalnızca pruneImages'ın 2 GB eşiğini aştığı anda çağrılıyordu,
+        // dolayısıyla bir öksüz o eşiğe kadar asla geri kazanılamıyordu).
+        sweepOrphanFiles()
     }
 
     /// `clips`in sahip olduğu orijinal görsel ve (varsa) küçük resim
@@ -494,11 +503,16 @@ public final class ClipStore {
     /// taramasına dönüşürdü.
     @discardableResult
     public func pruneImages(highWater: Int, lowWater: Int) throws -> Int {
+        // Süpürme artık `highWater` kontrolünün İÇİNDE değil ÖNÜNDE: eskiden
+        // yalnızca toplam boyut 2 GB'ı (üretim eşiği) aşınca çalışıyordu, bu
+        // da 2 GB'ın altında kalan bir öksüzün sonsuza dek görünmez kalması
+        // demekti — hiçbir satır ona işaret etmediği için satır-tabanlı
+        // döngü de onu asla adaylar arasında görmezdi. Her yakalamada ucuz
+        // bir dizin taraması, sonsuza dek büyüyebilen öksüz dosyalardan daha
+        // ucuz bir maliyet.
+        sweepOrphanFiles()
         var size = try imagesByteSize()
         guard size > highWater else { return 0 }
-        sweepOrphanFiles()
-        size = try imagesByteSize()
-        guard size > lowWater else { return 0 }
         let candidates = try query("""
             SELECT * FROM clips
             WHERE imagePath IS NOT NULL AND pinned = 0
