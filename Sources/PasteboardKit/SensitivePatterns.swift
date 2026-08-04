@@ -163,6 +163,48 @@ public enum SensitivePatterns {
             .contains { isTokenShapedSegment(String($0)) }
     }
 
+    // MARK: - URL içindeki jetonlar (I4, üçüncü tur)
+
+    /// `ClipMasking.shouldMask` `.link` klipleri için bu fonksiyonu çağırır
+    /// — `isSensitive` DEĞİL, çünkü bir bağlantının tamamı (sorgu dizesi +
+    /// parça dahil) genel yüksek-entropi kuralına göre neredeyse her zaman
+    /// "jeton gibi" görünür (fix round 1, bulgu 1: bu yüzden `.link` baştan
+    /// tamamen muaf tutulmuştu). Ama bu, çıplak bir bağlantıyı korumak için
+    /// yola çıkıp bir parola sıfırlama/magic-link/presigned URL'nin
+    /// TAŞIDIĞI jetonu da görünür bırakıyordu — omuz üstünden okumaya karşı
+    /// bu özelliğin var olma sebebi tam olarak bu senaryo.
+    ///
+    /// Çözüm ikisini ayırmak: bağlantıyı YOL ve SORGU parçalarına ayırıp
+    /// (URLComponents ile), her birine `looksStructural`in kullandığı aynı
+    /// "bu parça jeton gibi mi" testini uyguluyoruz. Düz bir yol
+    /// (`/pull/14/files`) ya da kısa bir parça (`#diff-abc123`) hiçbir
+    /// zaman tetiklemez; bir jeton değeri (`?token=eyJ...`, presigned
+    /// imza) her zaman tetikler.
+    public static func isSensitiveLink(_ text: String) -> Bool {
+        guard let components = URLComponents(string: text) else { return false }
+        if isHiddenCredential(components.path) { return true }
+        if let query = components.query {
+            // Sorgu dizesini "&"/"=" üzerinden anahtar/değer parçalarına
+            // ayırıyoruz: bir jeton genelde TEK bir değer olarak durur
+            // (ör. "token=<jwt>"), tüm sorgu dizesini tek parça sayıp
+            // `structuralDelimiters`e bırakırsak "&" bir ayraç olmadığı
+            // için birden çok parametre tek, çok uzun bir segmente
+            // yapışıp kaçabilirdi.
+            let pieces = query.split(whereSeparator: { $0 == "&" || $0 == "=" }).map(String.init)
+            if pieces.contains(where: isHiddenCredential) { return true }
+        }
+        if let fragment = components.fragment, isHiddenCredential(fragment) { return true }
+        return false
+    }
+
+    /// `text` (bir URL yolu ya da tek bir sorgu anahtarı/değeri/parçası)
+    /// kendisi bilinen bir kimlik bilgisi biçiminde mi, yoksa bir dosya
+    /// yolunun jeton gizleyebilmesiyle aynı şekilde birini İÇİNDE mi
+    /// taşıyor.
+    private static func isHiddenCredential(_ text: String) -> Bool {
+        isKnownCredential(text) || containsTokenShapedSegment(text)
+    }
+
     /// Tek bir yol/URL parçasının kendi başına bir jeton gibi görünüp
     /// görünmediği — iki bağımsız sinyal, ikisi de yeterli:
     ///
