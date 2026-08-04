@@ -181,7 +181,16 @@ public enum SensitivePatterns {
     /// zaman tetiklemez; bir jeton değeri (`?token=eyJ...`, presigned
     /// imza) her zaman tetikler.
     public static func isSensitiveLink(_ text: String) -> Bool {
-        guard let components = URLComponents(string: text) else { return false }
+        // `isSensitive` trims before classifying (yukarıda), ama bu fonksiyon
+        // trim ETMİYORDU — bir panoya yapıştırılan bağlantının başında tek
+        // bir boşluk ya da satır başı olduğunda `URLComponents(string:)` nil
+        // dönüyor, guard hemen `false`a düşüyor ve içindeki jeton (magic-link,
+        // parola sıfırlama) hiç maskelenmeden kalıyordu — tam da bu özelliğin
+        // korumak için var olduğu senaryo. Sondaki boşluk sorun değildi
+        // (`URLComponents` onu tolere ediyor); asimetriyi ortadan kaldırmak
+        // için `isSensitive`le aynı trim'i burada da uyguluyoruz.
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let components = URLComponents(string: trimmed) else { return false }
         if isHiddenCredential(components.path) { return true }
         if let query = components.query {
             // Sorgu dizesini "&"/"=" üzerinden anahtar/değer parçalarına

@@ -63,3 +63,27 @@ import Store
 @Test func anOrdinarySearchLinkIsStillNeverMasked() {
     #expect(!shouldMask(kind: .link, text: "https://www.google.com/search?q=swift+concurrency"))
 }
+
+// I4, dördüncü tur, madde 1 (BLOCKING): `ClipCapture` sınıflandırmayı
+// TRIM edilmiş metin üstünde yapıyor ama TRIM EDİLMEMİŞ metni saklıyordu;
+// `isSensitiveLink` trim etmiyordu, `URLComponents(string:)` başta boşluk/
+// satır başı olan bir dizede nil dönüyor, guard erkenden `false`a düşüyordu
+// — panoya kopyalanmış bir parola sıfırlama bağlantısının önünde tek bir
+// yeni satır varsa jeton hiç maskelenmiyordu. Baştaki boşluk `isSensitive`de
+// zaten trim edildiği için asimetrikti; şimdi ikisi de aynı davranıyor.
+
+@Test func aResetLinkWithALeadingNewlineIsStillMasked() {
+    let link = "\nhttps://app.example.com/reset-password?token=aZ3xK9mQ2wP7vN4tL6cJ8sB1dF5gH0yU"
+    #expect(shouldMask(kind: .link, text: link))
+}
+
+@Test func aResetLinkWithALeadingSpaceIsStillMasked() {
+    let link = " https://app.example.com/reset-password?token=aZ3xK9mQ2wP7vN4tL6cJ8sB1dF5gH0yU"
+    #expect(shouldMask(kind: .link, text: link))
+}
+
+@Test func aResetLinkWithLeadingAndTrailingWhitespaceIsStillMasked() {
+    let link = "\n https://app.example.com/reset-password?token=aZ3xK9mQ2wP7vN4tL6cJ8sB1dF5gH0yU \n"
+    #expect(shouldMask(kind: .link, text: link))
+}
+
