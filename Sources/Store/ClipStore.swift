@@ -279,9 +279,13 @@ public final class ClipStore {
 
     /// Verilen contentHash için satırı arar (varsa). CaptureCoordinator bunu
     /// bir görsel dosyası diske yazmadan ÖNCE çağırır: içerik zaten
-    /// depolanıyorsa upsert zaten var olan satırı günceller ve imagePath'e
-    /// dokunmaz, dolayısıyla yeni dosya hiç yazılmamalı — yazıp sonra silmek
-    /// yerine baştan atlamak, hiçbir satırın işaret etmediği dosya bırakmaz.
+    /// depolanıyorsa ve dosyası hâlâ diskteyse yeni dosya hiç yazılmamalı —
+    /// yazıp sonra silmek yerine baştan atlamak, hiçbir satırın işaret
+    /// etmediği dosya bırakmaz. (`upsert`in imagePath'i artık COALESCE ile
+    /// güncellediğini, yalnızca NULL verildiğinde eski değeri koruduğunu
+    /// unutma — bkz. `upsert` üzerindeki I3 gerekçesi: budanmış bir satır
+    /// yeniden yakalandığında bu arama sayesinde dosya baştan doğru ID'yle
+    /// yeniden yazılır, upsert de yeni yolu satıra taşır.)
     public func find(contentHash: String) throws -> Clip? {
         let sql = "SELECT * FROM clips WHERE contentHash = ? LIMIT 1;"
         var stmt: OpaquePointer?
