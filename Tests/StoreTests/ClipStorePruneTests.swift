@@ -90,6 +90,69 @@ private func imageClip(_ store: ClipStore, bytes: Int, at seconds: TimeInterval,
     #expect(all[0].sourceBundleID == "com.bob's.app")
 }
 
+@Test func deleteAllRemovesImageAndThumbnailFilesNotJustRows() throws {
+    // C3: "Tümünü temizle" satırları siliyordu ama dosyaları hiç silmiyordu —
+    // gizliliği başlıca vaat eden bir uygulama için kullanıcı geçmişini
+    // temizlediğinde her ekran görüntüsü diskte kalıyordu.
+    let store = try makeStore()
+    let clip = try imageClip(store, bytes: 1_000, at: 1)
+    let thumbURL = store.thumbsDirectory.appendingPathComponent("\(clip.id.uuidString).jpg")
+    try Data([0xFF, 0xD8]).write(to: thumbURL)
+    try store.deleteAll()
+    #expect(!FileManager.default.fileExists(atPath: clip.imagePath!))
+    #expect(!FileManager.default.fileExists(atPath: thumbURL.path))
+    #expect(try store.imagesByteSize() == 0)
+}
+
+@Test func deleteByIdRemovesTheImageFileItOwns() throws {
+    let store = try makeStore()
+    let doomed = try imageClip(store, bytes: 1_000, at: 1)
+    let survivor = try imageClip(store, bytes: 2_000, at: 2)
+    try store.delete(id: doomed.id)
+    #expect(!FileManager.default.fileExists(atPath: doomed.imagePath!))
+    #expect(FileManager.default.fileExists(atPath: survivor.imagePath!))
+    #expect(try store.imagesByteSize() == 2_000)
+}
+
+@Test func deleteCreatedAfterRemovesOnlyTheImageFilesOfTheRowsItDeletes() throws {
+    let store = try makeStore()
+    let old = try imageClip(store, bytes: 1_000, at: 1_000)
+    let recent = try imageClip(store, bytes: 1_000, at: 9_000)
+    try store.deleteCreated(after: Date(timeIntervalSince1970: 5_000))
+    #expect(FileManager.default.fileExists(atPath: old.imagePath!))
+    #expect(!FileManager.default.fileExists(atPath: recent.imagePath!))
+    #expect(try store.imagesByteSize() == 1_000)
+}
+
+@Test func pruneImagesSweepsAFileWithNoOwningRowAndConverges() throws {
+    // Öksüz bir dosya (hiçbir satırın imagePath'i onu göstermiyor) tek
+    // başına highWater'ı aşarsa, satır-tabanlı budama döngüsü onu asla
+    // göremezdi (adayları imagePath IS NOT NULL satırlarından seçiyor) —
+    // budama sonsuza dek yakınsayamazdı.
+    let store = try makeStore()
+    let orphan = store.imagesDirectory.appendingPathComponent("orphan-\(UUID().uuidString).png")
+    try Data(repeating: 0xAB, count: 5_000).write(to: orphan)
+    // Süpürmenin "az önce yazıldı, satırı uçuşta olabilir" koruması bu
+    // testte devreye girmesin diye değişiklik zamanını geriye alıyoruz.
+    try FileManager.default.setAttributes(
+        [.modificationDate: Date().addingTimeInterval(-60)], ofItemAtPath: orphan.path)
+    #expect(try store.imagesByteSize() == 5_000)
+    _ = try store.pruneImages(highWater: 1_000, lowWater: 500)
+    #expect(try store.imagesByteSize() == 0)
+    #expect(!FileManager.default.fileExists(atPath: orphan.path))
+}
+
+@Test func pruneImagesDoesNotSweepAFreshlyWrittenOrphanFile() throws {
+    // Karşıt durum: CaptureCoordinator.tick() görseli satırdan ÖNCE yazıyor;
+    // o pencerede pruneImages çağrılırsa (bugünkü tek çağrı yolunda
+    // çağrılmıyor, ama API genel) taze dosyayı silmemeli.
+    let store = try makeStore()
+    let freshOrphan = store.imagesDirectory.appendingPathComponent("fresh-\(UUID().uuidString).png")
+    try Data(repeating: 0xAB, count: 5_000).write(to: freshOrphan)
+    _ = try store.pruneImages(highWater: 1_000, lowWater: 500)
+    #expect(FileManager.default.fileExists(atPath: freshOrphan.path))
+}
+
 @Test func upsertUpdateRoundTripsAnApostropheInSourceNameExactly() throws {
     let store = try makeStore()
     let first = Clip(id: UUID(), createdAt: Date(timeIntervalSince1970: 100), kind: .text,

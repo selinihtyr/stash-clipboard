@@ -318,16 +318,43 @@ public final class ClipStore {
         try exec("UPDATE clips SET shelfID = \(value) WHERE id = '\(id.uuidString)';")
     }
 
+    /// Silinen üç yoldan (delete/deleteCreated/deleteAll) HER BİRİ satırların
+    /// sahip olduğu görsel ve küçük resim dosyalarını da kaldırmalı (C3):
+    /// sadece SQL çalıştırıp dosyaları yerinde bırakmak, kullanıcı geçmişini
+    /// temizlediğinde her kopyaladığı ekran görüntüsünün diskte kalması
+    /// demek — gizlilik önceliğini iddia eden bir uygulama için en kötü bulgu.
+    /// Satırlar silinmeden ÖNCE hangi dosyalara sahip olduklarını okuyoruz;
+    /// SQL'in kendisi dosya yollarını bilmiyor.
     public func delete(id: UUID) throws {
+        let affected = try query("SELECT * FROM clips WHERE id = '\(id.uuidString)'")
         try exec("DELETE FROM clips WHERE id = '\(id.uuidString)';")
+        removeFiles(for: affected)
     }
 
     public func deleteCreated(after date: Date) throws {
-        try exec("DELETE FROM clips WHERE createdAt > \(date.timeIntervalSince1970) AND pinned = 0;")
+        let condition = "createdAt > \(date.timeIntervalSince1970) AND pinned = 0"
+        let affected = try query("SELECT * FROM clips WHERE \(condition)")
+        try exec("DELETE FROM clips WHERE \(condition);")
+        removeFiles(for: affected)
     }
 
     public func deleteAll() throws {
+        let affected = try query("SELECT * FROM clips WHERE pinned = 0")
         try exec("DELETE FROM clips WHERE pinned = 0;")
+        removeFiles(for: affected)
+    }
+
+    /// `clips`in sahip olduğu orijinal görsel ve (varsa) küçük resim
+    /// dosyalarını diskten siler. Metin/bağlantı/dosya klipleri zaten
+    /// `imagePath == nil`, bu yüzden onlar için hiçbir şey yapılmaz.
+    /// `try?`: bir dosya zaten yoksa (ör. daha önce pruneImages tarafından
+    /// budanmış) silme başarısızlığı satır silme işlemini geçersiz kılmamalı.
+    private func removeFiles(for clips: [Clip]) {
+        let fm = FileManager.default
+        for clip in clips {
+            if let path = clip.imagePath { try? fm.removeItem(atPath: path) }
+            try? fm.removeItem(at: thumbsDirectory.appendingPathComponent("\(clip.id.uuidString).jpg"))
+        }
     }
 
     /// Raf adı kullanıcı tarafından yazılıyor; `upsert`in üstündeki yorumun
@@ -426,13 +453,41 @@ public final class ClipStore {
         }
     }
 
+    /// Bir dosyanın diske yazılışı ile onu işaret eden satırın eklenmesi
+    /// arasında bir pencere var: `CaptureCoordinator.tick()` görseli ÖNCE
+    /// yazar, satırı SONRA ekler (yazma başarısız olursa hiç var olmayan bir
+    /// dosyaya işaret eden satır oluşmasın diye — bkz. o dosyadaki gerekçe).
+    /// Bugünkü tek çağrı yolunda bu iki adım aynı @MainActor tick() içinde,
+    /// art arda ve senkron çalışıyor; süpürme de satır eklendikten SONRA
+    /// çağrılıyor, dolayısıyla PRATİKTE süpürmenin gördüğü her dosyanın
+    /// satırı zaten vardır. Yine de bu fonksiyon genel bir API: gelecekte
+    /// başka bir çağıran (ör. bir "şimdi temizle" düğmesi) bir yakalamayla
+    /// çakışabilir. Bu yüzden süpürme, değişiklik zamanı yakın geçmişteki
+    /// (aşağıdaki `orphanGracePeriod`) dosyalara dokunmuyor — o pencerede
+    /// yazılmış ama satırı henüz eklenmemiş taze bir dosyayı yanlışlıkla
+    /// silmemek için.
+    private static let orphanGracePeriod: TimeInterval = 5
+
     /// `highWater` aşıldığında en eski görselleri `lowWater`'ın altına inene
     /// kadar siler. Satırlar kalır: kart "görsel artık saklanmıyor" diyebilsin.
     /// Sabitlenmiş kartların görselleri hiç budanmaz.
+    ///
+    /// Satır-tabanlı budamadan ÖNCE hiçbir satırın işaret etmediği dosyaları
+    /// süpürür (C3): `delete`/`deleteAll` bu sürümden önce dosya silmiyordu,
+    /// bu da diskte hiçbir satırın büyütmediği ama `imagesByteSize()`e
+    /// katkıda bulunan "öksüz" dosyalar bırakabiliyordu. Öksüzler tek başına
+    /// `highWater`'ı aşınca, satır-tabanlı döngü (adaylarını `imagePath IS
+    /// NOT NULL` satırlarından seçtiği için) onları asla göremez ve budama
+    /// sonsuza dek yakınsayamazdı — `CaptureCoordinator.tick()` bunu HER
+    /// yakalamada çağırdığından bu, kalıcı ve boşa giden bir tam dizin
+    /// taramasına dönüşürdü.
     @discardableResult
     public func pruneImages(highWater: Int, lowWater: Int) throws -> Int {
         var size = try imagesByteSize()
         guard size > highWater else { return 0 }
+        sweepOrphanFiles()
+        size = try imagesByteSize()
+        guard size > lowWater else { return 0 }
         let candidates = try query("""
             SELECT * FROM clips
             WHERE imagePath IS NOT NULL AND pinned = 0
@@ -452,6 +507,37 @@ public final class ClipStore {
             removed += 1
         }
         return removed
+    }
+
+    /// `images/` ve `thumbs/` dizinlerini diskteki gerçek dosyalarla, hangi
+    /// dosyaların hâlâ bir satır tarafından referans verildiğiyle
+    /// karşılaştırıp hiçbirinin işaret etmediğini siler. `orphanGracePeriod`
+    /// içinde değiştirilmiş dosyalara dokunmaz — bkz. `pruneImages`
+    /// üzerindeki gerekçe (yazma/satır-ekleme sırası).
+    private func sweepOrphanFiles() {
+        let fm = FileManager.default
+        let referenced = (try? query("SELECT * FROM clips WHERE imagePath IS NOT NULL")) ?? []
+        let referencedImageNames = Set(referenced.compactMap {
+            $0.imagePath.map { URL(fileURLWithPath: $0).lastPathComponent }
+        })
+        let referencedThumbNames = Set(referenced.map { "\($0.id.uuidString).jpg" })
+        let cutoff = Date().addingTimeInterval(-Self.orphanGracePeriod)
+
+        func sweep(_ directory: URL, keeping referenced: Set<String>) {
+            guard let files = try? fm.contentsOfDirectory(
+                at: directory, includingPropertiesForKeys: [.contentModificationDateKey]) else { return }
+            for file in files where !referenced.contains(file.lastPathComponent) {
+                let mtime = (try? file.resourceValues(forKeys: [.contentModificationDateKey])
+                    .contentModificationDate) ?? nil
+                // Yaşı okunamıyorsa ya da yakın geçmişteyse dokunma: emin
+                // olamadığımız ya da taze olabilecek (satır eklemesi hâlâ
+                // uçuşta olabilecek) bir dosyayı silmemeyi tercih ediyoruz.
+                guard let mtime, mtime <= cutoff else { continue }
+                try? fm.removeItem(at: file)
+            }
+        }
+        sweep(imagesDirectory, keeping: referencedImageNames)
+        sweep(thumbsDirectory, keeping: referencedThumbNames)
     }
 
     private func bindText(_ stmt: OpaquePointer?, _ index: Int32, _ value: String?) {
