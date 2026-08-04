@@ -94,7 +94,8 @@ public final class ClipCapture {
         // (C1). fileURLStrings() artık yalnızca gerçek file:// URL'lerini
         // döndürdüğü için (bkz. PasteboardReading), buradan geçen bir web
         // bağlantısı asla file dalına düşmez.
-        if let link = pasteboard.webURLString(), !link.isEmpty {
+        if let link = pasteboard.webURLString(), !link.isEmpty,
+           Self.prefersURL(link, overPlainText: pasteboard.string()) {
             return CapturedClip(kind: .link, text: link, imageData: nil,
                                 contentHash: Self.hash(.link, Data(link.utf8)))
         }
@@ -114,6 +115,20 @@ public final class ClipCapture {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.contains(" "), let url = URL(string: trimmed) else { return false }
         return url.scheme == "http" || url.scheme == "https"
+    }
+
+    /// `webURLString()` bir tarayıcı sekmesinin SAYFA URL'sini taşır — ama
+    /// aynı pasteboard'da kullanıcının o sayfada gerçekten SEÇTİĞİ düz metin
+    /// de olabilir (bazı uygulamalar ikisini birlikte yazar). URL her zaman
+    /// kazanırsa o seçim sessizce kaybolur. Reprodüksiyonu bilinen bir
+    /// uygulama yok — bu ucuz bir önlem, kanıtlanmış bir hata değil — bu
+    /// yüzden URL'yi yalnızca düz metin YOKSA, URL'yle AYNIYSA (tipik
+    /// tarayıcı davranışı) ya da kendisi zaten bağlantı BİÇİMİNDEYSE tercih
+    /// ediyoruz; aksi halde düz metin dalına düşüp gerçek seçimi koruyoruz.
+    static func prefersURL(_ link: String, overPlainText text: String?) -> Bool {
+        guard let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty
+        else { return true }
+        return text == link || isLink(text)
     }
 
     /// Kind, hash'e dahil edilir: ham baytları aynı olan ama farklı türden içerik

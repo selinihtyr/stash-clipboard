@@ -72,6 +72,35 @@ private func capture(_ pb: FakePasteboard, blocked: Set<String> = []) -> ClipCap
     #expect(c.poll(frontmostBundleID: "com.1password.1password") == nil)
 }
 
+@MainActor @Test func aGenuinePlainTextSelectionAlongsideAPageURLIsNotLostToTheURL() {
+    // Risk (reprodüksiyonu bilinen bir uygulama yok, ama ucuz bir önlem):
+    // bir uygulama panoya hem sayfanın URL'sini hem kullanıcının o sayfada
+    // gerçekten seçtiği düz metni yazabilirdi. URL her zaman kazanırsa o
+    // seçim sessizce kaybolurdu.
+    let pb = FakePasteboard()
+    pb.webURL = "https://example.com/articles/2026"
+    pb.text = "Bu makalede seçtiğim asıl cümle bu."
+    pb.types = ["public.url", "public.utf8-plain-text"]
+    pb.changeCount += 1
+    let clip = capture(pb).poll(frontmostBundleID: nil)
+    #expect(clip?.kind == .text)
+    #expect(clip?.text == "Bu makalede seçtiğim asıl cümle bu.")
+}
+
+@MainActor @Test func aPlainTextThatIsItselfADifferentLinkStillPrefersTheWebURL() {
+    // Metin boş değil ama kendisi de bağlantı biçiminde — bu durumda hangisi
+    // kazanırsa kazansın kullanıcı bir bağlantı görür, URL'yi tercih etmek
+    // güvenli.
+    let pb = FakePasteboard()
+    pb.webURL = "https://example.com/articles/2026?ref=twitter"
+    pb.text = "https://other.example/short-link"
+    pb.types = ["public.url", "public.utf8-plain-text"]
+    pb.changeCount += 1
+    let clip = capture(pb).poll(frontmostBundleID: nil)
+    #expect(clip?.kind == .link)
+    #expect(clip?.text == "https://example.com/articles/2026?ref=twitter")
+}
+
 @MainActor @Test func blockingIsCaseInsensitiveSoAStoredEntryStillMatchesADifferentlyCasedRuntimeID() {
     // C4, ikinci tur: kara listeye "COM.APPLE.NOTES" gibi farklı harf
     // biçimiyle bir kayıt girebilmek anlamsızdır, çünkü macOS'un bildirdiği
