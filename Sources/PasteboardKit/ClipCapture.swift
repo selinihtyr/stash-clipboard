@@ -72,7 +72,16 @@ public final class ClipCapture {
         defer { lastChangeCount = count }
         guard count != lastChangeCount else { return nil }
         guard Set(pasteboard.types).isDisjoint(with: Self.skipTypes) else { return nil }
-        if let id = frontmostBundleID, policy.blockedBundleIDs.contains(id) { return nil }
+        // Büyük/küçük harf duyarsız karşılaştırma (C4, ikinci tur): kara
+        // listeye giriş artık küçük harfe normalize ediliyor
+        // (`validateBlockedBundleID`), ama burada da `Set.contains`in tam
+        // eşleşme istemesine güvenmek yerine ayrıca normalize ediyoruz —
+        // tek doğruluk kaynağına (giriş noktasındaki normalizasyona) körü
+        // körüne güvenmek, ileride başka bir yazma yolu eklenirse (ör. bir
+        // ayar dosyasını elle düzenleme) sessizce aynı hataya geri dönerdi.
+        if let id = frontmostBundleID, policy.blockedBundleIDs.contains(where: {
+            $0.caseInsensitiveCompare(id) == .orderedSame
+        }) { return nil }
 
         if let data = pasteboard.imageData(), !data.isEmpty {
             return CapturedClip(kind: .image, text: nil, imageData: data,

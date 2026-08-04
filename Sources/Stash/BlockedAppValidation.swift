@@ -20,17 +20,32 @@ enum BlockedBundleIDValidation: Equatable {
 /// En az iki bileşenli ters etki alanı biçimi (ör. "com.apple.Notes")
 /// makul bir asgari çubuk: gerçek bundle ID'lerin şeklini zorunlu kılar
 /// ama var olduklarını iddia etmez.
+///
+/// C4, ikinci tur: "COM.APPLE.NOTES" ayrı, geçerli bir girdi olarak kabul
+/// ediliyordu — ama `ClipCapture` çalışırken karşılaştırmayı `Set.contains`
+/// ile yapıyor, o da tam eşleşme ister. Kullanıcı bir uygulamayı
+/// "engellediğini" görüyor ama gerçek (küçük harfli) bundle ID hiç
+/// eşleşmediği için hiçbir şey engellenmiyordu — sessiz, fark edilmesi
+/// neredeyse imkansız bir başarısızlık. Kabul edilen değer burada küçük
+/// harfe normalize ediliyor (depolama tarafı); karşılaştırma tarafı
+/// (`ClipCapture.poll`) de aynı normalize edilmiş biçimle karşılaştırıyor —
+/// tek bir kaçış noktası yerine iki ucu da tutarlı kılmak, gelecekte biri
+/// unutulursa bile ikincisinin hâlâ doğru davranmasını sağlar.
 func validateBlockedBundleID(_ input: String, existing: Set<String>) -> BlockedBundleIDValidation {
     let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else {
         return .invalid(reason: "Paket kimliği boş olamaz.")
     }
-    let pattern = #"^[A-Za-z0-9]+(\.[A-Za-z0-9-]+)+$"#
+    // Alt çizgi kurallı bir reverse-DNS bileşeni değildir ama gerçek
+    // uygulamalar kullanır (ör. "com.my_company.app"); onu reddetmek
+    // kullanıcının elindeki gerçek bir bundle ID'yi geçersiz sayardı.
+    let pattern = #"^[A-Za-z0-9_]+(\.[A-Za-z0-9_-]+)+$"#
     guard trimmed.range(of: pattern, options: .regularExpression) != nil else {
         return .invalid(reason: "Ters etki alanı biçiminde olmalı (ör. com.apple.Notes).")
     }
-    guard !existing.contains(trimmed) else {
+    let normalized = trimmed.lowercased()
+    guard !existing.contains(where: { $0.lowercased() == normalized }) else {
         return .invalid(reason: "Bu paket kimliği zaten listede.")
     }
-    return .valid(trimmed)
+    return .valid(normalized)
 }

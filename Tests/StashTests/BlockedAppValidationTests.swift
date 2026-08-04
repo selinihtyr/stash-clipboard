@@ -13,13 +13,42 @@ import Testing
 }
 
 @Test func aPlausibleReverseDNSBundleIDIsAccepted() {
+    // C4, ikinci tur: kabul edilen değer küçük harfe normalize edilir (bkz.
+    // validInputIsNormalizedToLowercase) — girdiğin biçim korunmuyor.
     #expect(validateBlockedBundleID("com.apple.Notes", existing: [])
-        == .valid("com.apple.Notes"))
+        == .valid("com.apple.notes"))
 }
 
 @Test func inputIsTrimmedBeforeValidating() {
     #expect(validateBlockedBundleID("  com.apple.Notes  ", existing: [])
-        == .valid("com.apple.Notes"))
+        == .valid("com.apple.notes"))
+}
+
+// C4, ikinci tur: "COM.APPLE.NOTES" ayrı, geçerli bir girdi olarak kabul
+// ediliyordu ama ClipCapture Set.contains ile karşılaştırdığı için hiçbir
+// zaman gerçek "com.apple.notes" kopyalarını engellemiyordu — kullanıcı bir
+// uygulamayı engellediğini SANIYORDU. Depolama ve karşılaştırma artık tutarlı
+// şekilde küçük harfe normalize ediliyor.
+
+@Test func validInputIsNormalizedToLowercase() {
+    #expect(validateBlockedBundleID("COM.APPLE.NOTES", existing: [])
+        == .valid("com.apple.notes"))
+}
+
+@Test func aDuplicateThatDiffersOnlyByCaseIsRejectedNotAddedAsASecondEntry() {
+    guard case .invalid = validateBlockedBundleID(
+        "COM.APPLE.NOTES", existing: ["com.apple.notes"]) else {
+        Issue.record("yalnızca büyük/küçük harf farkı olan bir tekrar eklenmemeliydi")
+        return
+    }
+}
+
+@Test func anUnderscoreInABundleIDComponentIsAccepted() {
+    // Kurallı değil ama gerçek: bazı uygulamalar ters etki alanında alt
+    // çizgi kullanır (ör. "com.my_company.app") — bunu implausible diye
+    // reddetmek gerçek bir bundle ID'yi kullanıcının elinden alır.
+    #expect(validateBlockedBundleID("com.my_company.app", existing: [])
+        == .valid("com.my_company.app"))
 }
 
 @Test func aSingleWordWithNoDotIsRejectedAsImplausible() {

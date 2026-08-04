@@ -72,6 +72,16 @@ private func capture(_ pb: FakePasteboard, blocked: Set<String> = []) -> ClipCap
     #expect(c.poll(frontmostBundleID: "com.1password.1password") == nil)
 }
 
+@MainActor @Test func blockingIsCaseInsensitiveSoAStoredEntryStillMatchesADifferentlyCasedRuntimeID() {
+    // C4, ikinci tur: kara listeye "COM.APPLE.NOTES" gibi farklı harf
+    // biçimiyle bir kayıt girebilmek anlamsızdır, çünkü macOS'un bildirdiği
+    // gerçek bundle ID'yle Set.contains eşleşmez ve kullanıcı hiçbir şeyin
+    // engellenmediğini fark etmeden "engelledim" sanır.
+    let pb = FakePasteboard(); pb.put(text: "not")
+    #expect(capture(pb, blocked: ["COM.EXAMPLE.APP"])
+        .poll(frontmostBundleID: "com.example.app") == nil)
+}
+
 @MainActor @Test func updatingPolicyCanAlsoUnblockAnApp() {
     let pb = FakePasteboard(); pb.put(text: "merhaba")
     let c = capture(pb, blocked: ["com.example.app"])
