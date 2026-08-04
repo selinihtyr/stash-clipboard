@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Stash</string>
+  <key>CFBundleDisplayName</key><string>Stash</string>
+  <key>CFBundleIdentifier</key><string>social.selin.stash</string>
+  <key>CFBundleExecutable</key><string>Stash</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <key>LSUIElement</key><true/>
+  <key>NSHumanReadableCopyright</key><string>MIT licensed</string>
+  <!-- Ekran görüntüsü izleyici opt-in (varsayılan kapalı, bkz. Ayarlar >
+       Ekran görüntüleri): açıldığında Masaüstü/Belgeler için TCC izin
+       istemi tetikler. Bu anahtarlar sistemin gösterdiği istemdeki metni
+       özelleştirir; anahtar olmadan da özellik çalışır, sadece istem daha
+       genel bir metin gösterir. -->
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>Reads the screenshot folder to add new screenshots to your clipboard history. Only used when you turn this on in Settings.</string>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>If your screenshot folder is set to Documents, reads it to add new screenshots to your clipboard history. Only used when you turn this on in Settings.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>If your screenshot folder is set to Downloads, reads it to add new screenshots to your clipboard history. Only used when you turn this on in Settings.</string>
+</dict>
+</plist>

@@ -1,0 +1,32 @@
+Audio credits for this folder (copy.wav, paste.wav)
+=====================================================
+
+This applies ONLY to the two .wav files in this folder. Everything else in
+this repository is MIT licensed — the audio is NOT; if you copy this folder
+out of the repo, these terms travel with it.
+
+The two files come from two DIFFERENT recordings under DIFFERENT licenses.
+
+copy.wav
+  Source:  "soft sound plastic button click" by orginaljun
+           Freesound sound #150382 — https://freesound.org/s/150382/
+  License: Creative Commons Attribution 3.0 Unported (CC-BY 3.0)
+           https://creativecommons.org/licenses/by/3.0/
+  Changes: downmixed to mono, leading/trailing silence trimmed, tail faded,
+           level lowered. CC-BY 3.0 permits derivatives and requires that
+           changes be marked — this line marks them.
+  ATTRIBUTION IS REQUIRED for this file.
+
+paste.wav
+  Source:  "inventory_select" by obrymec
+           Freesound sound #580829 — https://freesound.org/s/580829/
+  License: Creative Commons 0 (CC0 1.0 public domain dedication)
+           https://creativecommons.org/publicdomain/zero/1.0/
+  Changes: downmixed to mono, trimmed, tail faded, level adjusted.
+  Attribution is NOT required for this file; the credit above is courtesy.
+
+Attribution line to reproduce when redistributing copy.wav
+  "soft sound plastic button click" by orginaljun (freesound.org/s/150382),
+  licensed under CC-BY 3.0 (creativecommons.org/licenses/by/3.0), modified.
+
+Neither file is MIT licensed.
