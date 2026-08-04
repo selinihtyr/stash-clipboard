@@ -55,17 +55,25 @@ open /Applications/Stash.app
 İlk açılışta macOS imzasız uygulamayı engelleyebilir: `/Applications` içinde
 Stash'e sağ tıklayıp **Aç** deyin.
 
-**İmza uyarısı — okuyun, aksi halde yapıştırma "bozuk" görünür.** Stash
-ad-hoc imzalanır (`codesign --sign -`, çünkü geliştirici sertifikası yok).
-Bu imzanın hash'i (CDHash) ikiliye bağlıdır; kaynaktan her yeniden
-derlemede ikili değişir, dolayısıyla hash de değişir. macOS, Erişilebilirlik
-iznini bu hash'e bağlı verdiği için **her yeniden derleme ve yeniden kurma
-sonrası önceden verdiğiniz izin sessizce geçersiz kalır** — Stash çalışmaya
-devam eder ama doğrudan yapıştırma yerine panoya kopyalamaya düşer. Çözüm:
-Sistem Ayarları → Gizlilik ve Güvenlik → Erişilebilirlik'te Stash'i listeden
-kaldırıp yeniden ekleyin (ya da anahtarı kapatıp tekrar açın). Bunu ortadan
-kaldırmanın gerçek yolu sabit bir self-signed geliştirici sertifikasıdır;
-bu depo şu an onu içermiyor.
+**İmza uyarısı — okuyun, aksi halde yapıştırma "bozuk" görünür.**
+Erişilebilirlik izni imzaya bağlanır, o yüzden nasıl imzalandığı doğrudan
+kullanımı etkiler. `scripts/bundle.sh` şu sırayı izler:
+
+1. `STASH_SIGN_IDENTITY` ortam değişkeni verilmişse onu kullanır.
+2. Yoksa makinedeki ilk geliştirici sertifikasını (Apple Development veya
+   Developer ID) kendisi bulur.
+3. O da yoksa ad-hoc imzalar.
+
+**Sertifikayla imzalandıysa** kimlik sabit kalır ve verdiğiniz izin yeniden
+derlemeler arasında yaşar — bir kez verirsiniz, biter.
+
+**Ad-hoc imzalandıysa** bağlanacak sabit bir kimlik yoktur; macOS izni imzanın
+hash'ine (CDHash) bağlar, o da ikili her değiştiğinde değişir. Sonuç:
+**her yeniden derleme ve kurulumdan sonra izin sessizce geçersiz kalır** —
+Stash çalışmaya devam eder ama doğrudan yapıştırma yerine panoya kopyalamaya
+düşer. Bu durumda Sistem Ayarları → Gizlilik ve Güvenlik → Erişilebilirlik'te
+Stash'i listeden kaldırıp yeniden ekleyin, ya da terminalden
+`tccutil reset Accessibility social.selin.stash` çalıştırıp izni bir daha verin.
 
 ## İzinler
 

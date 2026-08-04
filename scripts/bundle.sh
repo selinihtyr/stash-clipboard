@@ -26,12 +26,27 @@ cp "$BIN_PATH/Stash" "$APP/Contents/MacOS/Stash"
 cp "$ROOT/Sources/Stash/Info.plist" "$APP/Contents/Info.plist"
 cp "$ROOT/Sources/Stash/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
-# Ad-hoc imza: geliştirici sertifikası olmadan uygulamayı çalıştırılabilir
-# kılan tek yol bu. Ama TCC izni imzanın CDHash'ine bağlanır ve kaynak
-# değişince hash de değişir — yani her kod değişikliğinden sonra
-# Erişilebilirlik izni yeniden onaylanmalı. Bunu ortadan kaldırmak istersen
-# gerçek çözüm sabit bir self-signed geliştirici sertifikasıdır (`--sign -`
-# yerine); bu script'in işi değil.
-codesign --force --sign - --timestamp=none "$APP"
+# İmza kimliği seçimi. Bu bir kolaylık değil, izinlerin kalıcılığı meselesi:
+# Erişilebilirlik izni imzaya bağlanır. Ad-hoc imzada bağlanacak sabit bir
+# kimlik olmadığı için TCC CDHash'e düşer, o da her kod değişikliğinde değişir —
+# yani her derlemeden sonra izni yeniden vermek gerekir. Gerçek bir sertifikayla
+# imzalarsak kimlik sabit kalır ve izin derlemeler arasında yaşar.
+#
+# Sıra: elle verilen kimlik > makinedeki ilk geliştirici sertifikası > ad-hoc.
+# Sertifikası olmayan biri (kaynaktan kuran çoğu kişi) yine ad-hoc'a düşer ve
+# uygulama çalışır; sadece izni her güncellemede yeniden vermesi gerekir.
+IDENTITY="${STASH_SIGN_IDENTITY:-}"
+if [ -z "$IDENTITY" ]; then
+    IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
+        | awk -F'"' '/Apple Development|Developer ID Application/ {print $2; exit}')"
+fi
+
+if [ -n "$IDENTITY" ]; then
+    echo "İmzalanıyor: $IDENTITY"
+    codesign --force --sign "$IDENTITY" --timestamp=none "$APP"
+else
+    echo "İmzalanıyor: ad-hoc (sertifika bulunamadı — izinler her derlemede sıfırlanır)"
+    codesign --force --sign - --timestamp=none "$APP"
+fi
 
 echo "Built $APP"
