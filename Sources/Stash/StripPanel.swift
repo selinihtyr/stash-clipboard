@@ -42,8 +42,12 @@ final class StripPanel: NSPanel {
     }
 
     func show(on screen: NSScreen) {
-        let frame = NSRect(x: screen.frame.minX, y: screen.frame.minY,
-                           width: screen.frame.width, height: Self.height)
+        // visibleFrame, frame değil: ekranın mutlak alt kenarına oturursak Dock
+        // şeridin altını örter ve kartların bir kısmı okunmaz olur. visibleFrame
+        // Dock'un (ve gizlenmiyorsa menü çubuğunun) kapladığı alanı zaten dışlıyor.
+        let area = screen.visibleFrame
+        let frame = NSRect(x: area.minX, y: area.minY,
+                           width: area.width, height: Self.height)
         // Aşağıdan yukarı kayma: önce ekranın altına gizle, sonra yerine sür.
         setFrame(frame.offsetBy(dx: 0, dy: -Self.height), display: false)
         makeKeyAndOrderFront(nil)
