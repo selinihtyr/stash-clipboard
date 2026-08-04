@@ -241,6 +241,57 @@ private func makeModel(_ texts: [String]) throws -> (StripModel, ClipStore, Reco
     #expect(attempt == .outcome(.pastedIntoFrontmostApp))
 }
 
+// MARK: - Kart-başına eylemler (hover yolu, seçili karttan bağımsız)
+
+@MainActor @Test func pinningAClipThatIsNotSelectedDoesNotMoveTheSelection() throws {
+    let (model, _, _) = try makeModel(["bir", "iki", "üç"])
+    model.select(index: 2) // "bir"
+    let selectedID = model.visible[2].id
+    let otherID = model.visible[0].id // "üç", not selected
+    try model.togglePin(id: otherID)
+    #expect(model.selectedIndex == model.visible.firstIndex(where: { $0.id == selectedID }))
+    #expect(model.visible[model.selectedIndex].id == selectedID)
+}
+
+@MainActor @Test func deletingANonSelectedClipLeavesTheSelectionOnTheSameClip() throws {
+    let (model, _, _) = try makeModel(["bir", "iki", "üç"])
+    model.select(index: 2) // "bir", last in list
+    let selectedID = model.visible[2].id
+    let victimID = model.visible[0].id // "üç", not selected
+    try model.delete(id: victimID)
+    #expect(model.visible[model.selectedIndex].id == selectedID)
+}
+
+@MainActor @Test func deletingTheSelectedClipLeavesAValidSelection() throws {
+    let (model, _, _) = try makeModel(["bir", "iki", "üç"])
+    model.select(index: 1) // "iki", the middle card
+    let selectedID = model.visible[1].id
+    try model.delete(id: selectedID)
+    #expect(model.visible.indices.contains(model.selectedIndex))
+    #expect(!model.visible.contains { $0.id == selectedID })
+}
+
+@MainActor @Test func deletingTheLastCardLeavesAnEmptyNonCrashingState() throws {
+    let (model, _, _) = try makeModel(["tek"])
+    let onlyID = model.visible[0].id
+    try model.delete(id: onlyID)
+    #expect(model.visible.isEmpty)
+    #expect(!model.visible.indices.contains(model.selectedIndex))
+}
+
+@MainActor @Test func movingAClipToAShelfWorksOnTheGivenClipNotTheSelection() throws {
+    let (model, _, _) = try makeModel(["bir", "iki"])
+    let shelf = try model.createShelf(name: "İş")
+    model.select(index: 0) // "iki"
+    let selectedID = model.visible[0].id
+    let movedID = model.visible[1].id // "bir", not selected
+    try model.moveToShelf(id: movedID, shelfID: shelf.id)
+    #expect(model.visible[model.selectedIndex].id == selectedID)
+    model.tab = .shelf(shelf.id)
+    try model.reload()
+    #expect(model.visible.map(\.id) == [movedID])
+}
+
 @MainActor @Test func defaultBlocklistCoversThePasswordManagers() {
     #expect(Settings.defaults.blockedBundleIDs.contains("com.1password.1password"))
     #expect(Settings.defaults.blockedBundleIDs.contains("com.apple.keychainaccess"))

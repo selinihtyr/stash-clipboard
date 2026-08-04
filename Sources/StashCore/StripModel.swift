@@ -31,6 +31,24 @@ public final class StripModel: ObservableObject {
         self.settings = settings
     }
 
+    private var currentScope: ClipStore.ClipScope {
+        switch tab {
+        case .all: return .all
+        case .pinned: return .pinned
+        case .images: return .kind(.image)
+        case .shelf(let id): return .shelf(id)
+        }
+    }
+
+    // Süzgeç artık SQL'de: 300'lük sayfa limiti her sekmenin KENDİ sonuç
+    // kümesine uygulanıyor, "300 en yeni satırı çek, sonra bellekte sekmeye
+    // göre süz" değil — aksi halde sabitlenmiş/rafa konmuş/görsel bir klip
+    // 300 satırdan eskiyince ilgili sekmede hiç görünmezdi (C2), arama ise
+    // ayrı bir yoldan geçtiği için bunu hiç fark ettirmezdi.
+    private func fetchVisible() throws -> [Clip] {
+        try store.clips(in: currentScope, matching: query.isEmpty ? nil : query, limit: Self.pageSize)
+    }
+
     public func reload() throws {
         // Raflar önce tazelenir: tab silinmiş bir rafı gösteriyorsa
         // reloadShelves onu .all'a düşürür, filtre bunu geçerli tab ile
@@ -38,22 +56,30 @@ public final class StripModel: ObservableObject {
         // şeride ve sekme çubuğunda hiçbir şeyin seçili görünmediği bir
         // ara duruma düşülür.
         try reloadShelves()
-        // Süzgeç artık SQL'de: 300'lük sayfa limiti her sekmenin KENDİ
-        // sonuç kümesine uygulanıyor, "300 en yeni satırı çek, sonra
-        // bellekte sekmeye göre süz" değil — aksi halde sabitlenmiş/rafa
-        // konmuş/görsel bir klip 300 satırdan eskiyince ilgili sekmede hiç
-        // görünmezdi (C2), arama ise ayrı bir yoldan geçtiği için bunu hiç
-        // fark ettirmezdi.
-        let scope: ClipStore.ClipScope
-        switch tab {
-        case .all: scope = .all
-        case .pinned: scope = .pinned
-        case .images: scope = .kind(.image)
-        case .shelf(let id): scope = .shelf(id)
-        }
-        visible = try store.clips(in: scope, matching: query.isEmpty ? nil : query, limit: Self.pageSize)
+        visible = try fetchVisible()
         // Liste değiştiğinde eski indekste kalmak yanlış kartı yapıştırır.
         selectedIndex = 0
+    }
+
+    /// Fare imleci hangi karttaysa tetiklenen sabitle/rafa-taşı/sil (bkz.
+    /// ClipCardView'daki ⌃P/⋯ kontrolleri) hovered kart üzerinde çalışır,
+    /// bu kart seçili olan kart olmak ZORUNDA DEĞİL. `reload()` gibi
+    /// selectedIndex'i sıfırlamak burada yanlış olurdu: kullanıcı üçüncü
+    /// kartın üstündeyken onu silip seçili birinci kart hâlâ görünürken
+    /// seçim sessizce başka bir kartı işaret ederse, ↵'in ne yapıştıracağı
+    /// kullanıcının beklemediği bir kart olur. Bunun yerine mutasyondan önce
+    /// seçili klibin kimliği saklanır; yeni listede hâlâ oradaysa (silinen/
+    /// taşınan/sabitlenen başka bir klipti) seçim ona yapışık kalır, yoksa
+    /// (kendisi silindi/listeden düştü) en yakın geçerli indekse düşülür.
+    private func refreshPreservingSelection() throws {
+        let anchorID = visible.indices.contains(selectedIndex) ? visible[selectedIndex].id : nil
+        try reloadShelves()
+        visible = try fetchVisible()
+        if let anchorID, let idx = visible.firstIndex(where: { $0.id == anchorID }) {
+            selectedIndex = idx
+        } else {
+            selectedIndex = min(selectedIndex, max(visible.count - 1, 0))
+        }
     }
 
     /// Rafları tazeler ve aktif tab artık var olmayan bir rafa işaret
@@ -160,5 +186,33 @@ public final class StripModel: ObservableObject {
         guard visible.indices.contains(selectedIndex) else { return }
         try store.delete(id: visible[selectedIndex].id)
         try reload()
+    }
+
+    // MARK: - Kart-başına eylemler (fare/hover yolu)
+    //
+    // Yukarıdaki üç `…Selected` metodu klavye yolunu (⌃P/⌃S/⌘⌫, hep seçili
+    // kart üzerinde) besliyor ve olduğu gibi kalıyor. Aşağıdakiler
+    // ClipCardView'un hover kontrolleri için: aynı üç işlem, ama parametre
+    // olarak verilen KİMLİĞİN kartı üzerinde — o kart seçili olmayabilir.
+    // Seçimi önce o karta taşıyıp sonra `…Selected`i çağırmak kısayol gibi
+    // görünür ama değildir: bu, ↵'in yapıştıracağı kartı kullanıcı fark
+    // etmeden değiştirir (bkz. refreshPreservingSelection üstündeki not).
+
+    public func togglePin(id: UUID) throws {
+        guard let clip = visible.first(where: { $0.id == id }) else { return }
+        try store.setPinned(!clip.pinned, id: clip.id)
+        try refreshPreservingSelection()
+    }
+
+    public func moveToShelf(id: UUID, shelfID: UUID?) throws {
+        guard visible.contains(where: { $0.id == id }) else { return }
+        try store.setShelf(shelfID, id: id)
+        try refreshPreservingSelection()
+    }
+
+    public func delete(id: UUID) throws {
+        guard visible.contains(where: { $0.id == id }) else { return }
+        try store.delete(id: id)
+        try refreshPreservingSelection()
     }
 }

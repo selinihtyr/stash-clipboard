@@ -17,7 +17,7 @@ struct StripView: View {
                     // yakın kartları kurar.
                     LazyHStack(alignment: .bottom, spacing: 14) {
                         ForEach(Array(model.visible.enumerated()), id: \.element.id) { index, clip in
-                            ClipCardView(clip: clip, isSelected: index == model.selectedIndex)
+                            ClipCardView(model: model, clip: clip, isSelected: index == model.selectedIndex)
                                 .id(clip.id)
                                 .onTapGesture { model.select(index: index) }
                         }

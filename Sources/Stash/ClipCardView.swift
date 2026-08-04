@@ -1,8 +1,10 @@
 import PasteboardKit
 import Store
+import StashCore
 import SwiftUI
 
 struct ClipCardView: View {
+    @ObservedObject var model: StripModel
     let clip: Clip
     let isSelected: Bool
 
@@ -14,6 +16,15 @@ struct ClipCardView: View {
     // (bkz. AppDelegate.toggleStrip), o yüzden yeniden açılış zaten maskeli
     // başlıyor; burada ekstra bir "sıfırla" mantığı gerekmiyor.
     @State private var revealed = false
+
+    // Sabitleme/⋯ kontrolleri sadece fare kartın üstündeyken görünür (bkz.
+    // dosya sonundaki hoverControls). Aynı sebeple identity'e bağlı: panel
+    // her açılışta yeniden kurulduğundan burada da fazladan bir "sıfırla"
+    // gerekmiyor.
+    @State private var isHovering = false
+    @State private var showingNewShelfPrompt = false
+    @State private var newShelfName = ""
+    @State private var shelfCreationError: String?
 
     private var typeLabel: String {
         switch clip.kind {
@@ -46,7 +57,11 @@ struct ClipCardView: View {
                     Text("çift tıkla, göster")
                         .font(.system(size: 9)).foregroundStyle(Theme.label.opacity(0.7))
                 }
-                if clip.pinned {
+                // Hover'dayken bu ikonun yerini hoverControls'teki sabitle
+                // düğmesi alır — o düğme dolu/boş ikonuyla zaten aynı durumu
+                // anlatıyor (bkz. o değişkenin üstündeki not), ikisini aynı
+                // anda göstermek aynı bilgiyi iki kere basardı.
+                if clip.pinned, !isHovering {
                     Image(systemName: "pin.fill").font(.system(size: 9))
                         .foregroundStyle(Theme.accent)
                 }
@@ -75,6 +90,97 @@ struct ClipCardView: View {
         // (ForEach içindeki .onTapGesture { model.select(...) }); çift tık
         // olmasaydı her seçim aynı zamanda açığa çıkarırdı.
         .onTapGesture(count: 2) { revealed = true }
+        // Kontroller kartın üstüne BİNDİRİLİYOR (overlay), VStack'e satır
+        // olarak eklenmiyor: aksi halde görünmelerinin kendisi kartın
+        // boyunu değiştirip metni kaydırırdı — brief'in yasakladığı tam da
+        // bu. onHover, hover'da mı olduğumuzu söyleyen tek gerçek kaynak;
+        // .overlay içindeki `if` de ondan başka bir şeye bakmıyor.
+        .overlay(alignment: .topTrailing) {
+            if isHovering { hoverControls.padding(8) }
+        }
+        .onHover { hovering in isHovering = hovering }
+        .alert("Yeni raf", isPresented: $showingNewShelfPrompt) {
+            TextField("Raf adı", text: $newShelfName)
+            Button("Oluştur") { createShelfAndMove() }
+            Button("Vazgeç", role: .cancel) { newShelfName = "" }
+        } message: {
+            Text("Rafa bir ad ver.")
+        }
+        .alert("Raf oluşturulamadı", isPresented: Binding(
+            get: { shelfCreationError != nil },
+            set: { if !$0 { shelfCreationError = nil } }
+        )) {
+            Button("Tamam", role: .cancel) { }
+        } message: {
+            Text(shelfCreationError ?? "")
+        }
+    }
+
+    /// Sabitle düğmesi + ⋯ taşma menüsü. İkisi de HOVERED kartı hedefler,
+    /// seçili kartı değil (bkz. StripModel'in "Kart-başına eylemler" bölümü)
+    /// — model.select(...)'i önce çağırıp sonra `…Selected`i kullanmak
+    /// kısayol gibi görünür ama ↵'in yapıştıracağı kartı sessizce değiştirir.
+    private var hoverControls: some View {
+        HStack(spacing: 6) {
+            Button {
+                try? model.togglePin(id: clip.id)
+            } label: {
+                Image(systemName: clip.pinned ? "pin.fill" : "pin")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(clip.pinned ? Theme.accent : Theme.body)
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+            .help(clip.pinned ? "Sabitlemeyi kaldır (⌃P)" : "Sabitle (⌃P)")
+
+            // Silme burada, çıplak bir çöp kutusu ikonu olarak DEĞİL: 162pt
+            // genişlikte iki ikon zaten sıkışık dururdu, ve yıkıcı eylemi bir
+            // kademe gömmek bilinçli bir seçim (brief'in gerekçesi).
+            Menu {
+                Menu("Rafa taşı") {
+                    ForEach(model.shelves) { shelf in
+                        Button(shelf.name) {
+                            try? model.moveToShelf(id: clip.id, shelfID: shelf.id)
+                        }
+                    }
+                    if !model.shelves.isEmpty { Divider() }
+                    Button("Yeni raf oluştur…") {
+                        newShelfName = ""
+                        showingNewShelfPrompt = true
+                    }
+                }
+                Button("Sil", role: .destructive) {
+                    try? model.delete(id: clip.id)
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Theme.body)
+                    .frame(width: 20, height: 20)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Rafa taşı (⌃S) · Sil (⌘⌫)")
+        }
+        .padding(4)
+        .background(Capsule().fill(Theme.cardFillSelected))
+        .overlay(Capsule().strokeBorder(Theme.cardStroke, lineWidth: 1))
+    }
+
+    /// `try? model.createShelf` yerine hatayı yakalayıp gösteriyor: boş ad
+    /// `createShelf`i StoreError ile düşürür (bkz. AppDelegate'teki ⌃S
+    /// akışının aynı gerekçesi), sessizce yutmak kullanıcıyı "Oluştur"a
+    /// bastığı hâlde hiçbir şey olmamış gibi bırakırdı.
+    private func createShelfAndMove() {
+        let name = newShelfName
+        newShelfName = ""
+        do {
+            let shelf = try model.createShelf(name: name)
+            try model.moveToShelf(id: clip.id, shelfID: shelf.id)
+        } catch {
+            shelfCreationError = "\(error)"
+        }
     }
 
     @ViewBuilder private var content: some View {
