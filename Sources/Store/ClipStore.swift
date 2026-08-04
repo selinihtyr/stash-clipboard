@@ -16,6 +16,10 @@ public final class ClipStore {
     public var imagesDirectory: URL { directory.appendingPathComponent("images") }
     public var thumbsDirectory: URL { directory.appendingPathComponent("thumbs") }
 
+    /// Açılışta bozuk bir veritabanı bulunup kenara alındıysa yedeğin yolu.
+    /// nil ise veritabanı sağlıklı açıldı, hiçbir şeye dokunulmadı.
+    public private(set) var recoveredFromCorruption: URL?
+
     public init(directory: URL) throws {
         self.directory = directory
         let fm = FileManager.default
@@ -32,7 +36,40 @@ public final class ClipStore {
         guard sqlite3_open(path, &db) == SQLITE_OK else {
             throw StoreError.openFailed(String(cString: sqlite3_errmsg(db)))
         }
-        try exec("PRAGMA journal_mode=WAL;")
+        do {
+            try exec("PRAGMA journal_mode=WAL;")
+            try createSchema()
+        } catch {
+            // Bozuk dosyayı silmiyoruz: kullanıcının verisi olabilir ve
+            // kurtarma denemesi bize değil ona ait.
+            sqlite3_close(db); db = nil
+            let backup = directory.appendingPathComponent(
+                "stash-bozuk-\(Int(Date().timeIntervalSince1970)).sqlite")
+            try? fm.moveItem(
+                at: directory.appendingPathComponent("stash.sqlite"), to: backup)
+            // WAL modu veritabanını üç dosyaya böler (.sqlite, -wal, -shm).
+            // Ana dosyayı taşıyıp bunları yerinde bırakırsak taze açılan
+            // veritabanı onları kendi write-ahead log'u sanıp bozuk içeriği
+            // geri oynatmaya çalışabilir; aynı kaygıyla siliyor değil,
+            // onları da yedeğin yanına taşıyoruz.
+            for suffix in ["-wal", "-shm"] {
+                let sidecar = directory.appendingPathComponent("stash.sqlite\(suffix)")
+                guard fm.fileExists(atPath: sidecar.path) else { continue }
+                try? fm.moveItem(at: sidecar,
+                    to: directory.appendingPathComponent("\(backup.lastPathComponent)\(suffix)"))
+            }
+            recoveredFromCorruption = backup
+            guard sqlite3_open(path, &db) == SQLITE_OK else {
+                throw StoreError.openFailed(String(cString: sqlite3_errmsg(db)))
+            }
+            try exec("PRAGMA journal_mode=WAL;")
+            try createSchema()
+        }
+    }
+
+    deinit { sqlite3_close(db) }
+
+    private func createSchema() throws {
         try exec("""
             CREATE TABLE IF NOT EXISTS clips (
               id TEXT PRIMARY KEY,
@@ -61,8 +98,6 @@ public final class ClipStore {
             );
             """)
     }
-
-    deinit { sqlite3_close(db) }
 
     private func exec(_ sql: String) throws {
         var err: UnsafeMutablePointer<CChar>?

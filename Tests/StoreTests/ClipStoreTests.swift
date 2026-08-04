@@ -40,6 +40,20 @@ private func textClip(_ text: String, at seconds: TimeInterval = 0) -> Clip {
     #expect(perms?.int16Value == 0o700)
 }
 
+@Test func anAlreadyExistingDirectoryWithLoosePermissionsIsTightened() throws {
+    // createDirectory'nin izin ataması sadece dizini KENDİSİ oluşturduğunda
+    // uygulanır; burada dizin zaten var (0755) ve ClipStore.init'in bunu
+    // ayrıca 0700'e çekmesi gerekiyor — regresyon daha önce depo dışında
+    // elle doğrulanmıştı, burada kalıcı bir test yok.
+    let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("stash-loose-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
+                                             attributes: [.posixPermissions: 0o755])
+    _ = try ClipStore(directory: dir)
+    let perms = try FileManager.default.attributesOfItem(atPath: dir.path)[.posixPermissions] as? NSNumber
+    #expect(perms?.int16Value == 0o700)
+}
+
 @Test func reopeningTheSameDirectoryKeepsTheData() throws {
     let (store, dir) = try makeStore()
     try store.insert(textClip("kalıcı"))

@@ -40,6 +40,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .appendingPathComponent("Stash")
             let store = try ClipStore(directory: dir)
             self.store = store
+            // Bu, uygulamanın çökmesine ya da başlamayı reddetmesine yol
+            // açan fatal bir durum DEĞİL: store zaten boş ve sağlıklı bir
+            // veritabanıyla açıldı, kullanıcıya sadece ne olduğunu
+            // söylüyoruz — presentFatal'daki gibi terminate etmiyoruz.
+            if let backup = store.recoveredFromCorruption {
+                let alert = NSAlert()
+                alert.messageText = "Geçmiş veritabanı okunamadı"
+                alert.informativeText = """
+                    Stash boş bir geçmişle açıldı. Eski dosya silinmedi, \
+                    yanına kopyalandı: \(backup.lastPathComponent)
+                    """
+                alert.runModal()
+            }
             let engine = PasteEngine(pasteboard: SystemPasteboardWriter(),
                                      keystrokes: SystemKeystrokeSender())
             let model = StripModel(store: store, engine: engine, settings: settingsStore.settings)
