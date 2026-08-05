@@ -4,91 +4,68 @@
 
 # Stash
 
-**Clipboard history for macOS that you can actually see.**
+**The card-based clipboard manager for macOS, without the subscription.**
 
-Press ⌥⌘V and your history slides up from the bottom of the screen as a strip
-of cards. Pick one, press ↵, and it lands in whatever you were typing in.
+Press ⌥⌘V and your history slides up as a strip of cards — images you can
+actually see, not filenames in a list. Pick one, press ↵, it lands where you
+were typing. Nothing leaves your Mac, and it hides API keys and card numbers
+before anyone reads them over your shoulder.
 
 </div>
 
 <img src="docs/images/strip.png" alt="The Stash strip: cards for an image, a note, a link, a masked token, a pinned command, a colour, and a file">
 
-## Why another clipboard manager
+## Why it exists
 
-macOS has no built-in clipboard history. The free managers are list-based and
-show images badly; the ones with a card interface are paid. Stash is the card
-interface, free, and local-only.
+macOS has no clipboard history. The free managers are lists that show images as
+filenames; the ones with a card interface — Paste, Pastebot — want $25 a year
+or $13 up front. Stash is the card interface, free, local-only, and it does a
+few things none of them do.
 
-But the reason to use it is in the details below — the behaviour a clipboard
-manager only gets right if someone bothered.
+## What's different
 
-## The details that took the work
+**It hides your secrets on screen.** API keys, tokens and card numbers show as
+dots until you double-click. No other clipboard manager does this, and if you
+copy credentials all day, your history is the one window you don't want open in
+a meeting. Card numbers are Luhn-checked, so an ISBN isn't mistaken for one.
 
-### Pasting an image adapts to where it lands
+**A bare link stays readable, a link with a token doesn't.** Masking every URL
+would make the strip useless — masking a password-reset link is the entire
+point. Stash tells them apart.
 
-Paste into Notes and you get the image. Paste into Terminal — which cannot
-accept images at all — and you get the file's path instead of nothing. Paste
-into Finder and you get the file. Each destination takes the richest thing it
-understands, the way macOS itself behaves when you copy a file.
+**Pasting an image adapts to where it lands.** Notes gets the image. Terminal,
+which can't take images at all, gets the file path instead of nothing. Finder
+gets the file.
 
-### Your password manager's clipboard is never stored
+**It catches ⌘⇧4 screenshots.** Those write straight to disk and never touch
+the clipboard, so no clipboard manager can see them. Stash can watch the folder
+— opt-in, off by default, and only files macOS itself tags as screenshots.
 
-Apps signal "don't store this" with an unofficial but widely honoured
-pasteboard type (`org.nspasteboard.ConcealedType` and friends). Stash checks
-for it *before* reading any content. 1Password and Keychain Access are
-blocklisted on top of that, and you can add more.
+**Nothing leaves your Mac.** No network code at all — `grep -rn "URLSession"
+Sources` comes back empty. No account, no sync, no telemetry, and no
+third-party dependencies to audit.
 
-### Masking tells a link from a token
+**It doesn't lie to you.** If it can't paste, it says so instead of closing
+silently. If it only copied, the sound you hear is the copy sound. If your
+database is corrupt it's moved aside, never deleted.
 
-A bare URL stays readable — hiding every GitHub link you copy would make the
-strip useless. But when a link's path or query carries a credential (a password
-reset, a magic link, a presigned S3 URL), that gets masked. Card numbers are
-verified with a Luhn checksum, so an ISBN or a tracking number isn't mistaken
-for one.
+<details>
+<summary>Smaller decisions, if you like this sort of thing</summary>
 
-### It doesn't re-capture its own paste
+- The app never re-captures its own paste — otherwise every paste would
+  overwrite a card's "copied from" and filtered pastes would duplicate entries.
+- Deleting a shelf keeps its cards. You're removing a folder, not binning what
+  was in it.
+- "Clear everything" spares what you pinned, and deletes the image files too,
+  not just the database rows.
+- Card controls act on the card under your pointer, not the selected one — so
+  reaching for the mouse never changes what ↵ would paste.
+- Database integrity is checked at open with `PRAGMA quick_check`, so a
+  half-written page surfaces then instead of failing mysteriously weeks later.
+- Startup is silent: whatever is already on the clipboard when Stash launches
+  gets stored without a sound, because you didn't just do anything.
 
-Without that, every paste would overwrite a card's "copied from" with wherever
-you pasted it, and a filtered paste would silently duplicate the entry.
-
-### When it can't paste, it says so
-
-No Accessibility permission, or the keystroke couldn't be posted — either way
-you're told the content is on the clipboard and ⌘V is yours. It never closes
-the strip having quietly done nothing.
-
-### It can watch your screenshot folder
-
-⌘⇧4 writes a file and never touches the clipboard, so no clipboard manager can
-see it. Turn this on and Stash picks up new screenshots from wherever macOS
-saves them. Off by default; only files macOS itself tags as screenshots; only
-ones created after you turned it on.
-
-### A corrupt database is moved aside, never deleted
-
-We can't recover it — but it's yours, and throwing it away isn't ours to do.
-Stash opens a fresh one, keeps the old file beside it, and tells you where it
-went. Integrity is checked at open with `PRAGMA quick_check`, so a half-written
-page is caught then rather than surfacing as a mystery failure weeks later.
-
-### Deleting a shelf keeps its cards
-
-You're removing a folder, not binning what was in it.
-
-### "Clear everything" spares what you pinned
-
-And it deletes the image files too, not just the database rows.
-
-### The sounds don't lie
-
-Silent for whatever is already on the clipboard at launch. Silent for anything
-deliberately not stored. And if a paste degrades to a copy, you hear the copy
-sound, not the paste one.
-
-### Card controls act on the card under the pointer
-
-Not the selected one — so reaching for the mouse never changes what ↵ would
-paste.
+</details>
 
 ## Install
 
