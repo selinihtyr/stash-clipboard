@@ -5,6 +5,7 @@ import PasteEngine
 import StashCore
 import Store
 import SwiftUI
+import Updater
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -13,8 +14,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // kombinasyonu değiştirince bu öğeyi elde tutmadan güncelleyecek bir yer
     // yok — bkz. openSettings içindeki applyShortcut çağrısı.
     private var openMenuItem: NSMenuItem?
+    // Aynı gerekçe: başlığı ("Update to 0.2.0…") ve etkinliği durum
+    // değiştikçe güncelleniyor, bkz. `refreshUpdateMenuItem`.
+    private var updateMenuItem: NSMenuItem?
+    private var updateController: UpdateController?
     private var panel: StripPanel?
     private var hotKey = HotKeyCenter()
+    // Kayıtlı kombinasyonun sahibi. `settingsStore` bu iş için KULLANILAMAZ:
+    // ayarlar penceresi mağazayı `onChange`den önce güncelliyor, bkz.
+    // HotKeyCoordinator'daki gerekçe. `lazy` çünkü başlangıç değeri
+    // `settingsStore`u okuyor; ilk erişim AÇILIŞTA (aşağıdaki
+    // `registerCurrent()`) olmak ZORUNDA — ilk kez ayarlardan gelen bir
+    // değişiklikte kurulsaydı başlangıç değeri olarak mağazadaki güncellenmiş
+    // (yeni) kombinasyonu okur ve düzeltilen hata geri gelirdi.
+    private lazy var hotKeyCoordinator = HotKeyCoordinator(
+        currentCombo: settingsStore.settings.combo,
+        register: { [weak self] combo in
+            guard let self else { return .failure(.alreadyTaken) }
+            return self.attemptRegister(combo)
+        })
     private var coordinator: CaptureCoordinator?
     private var model: StripModel?
     // `Settings` çıplak yazılınca bu dosya SwiftUI'yi de import ettiği için
@@ -43,7 +61,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var soundFeedback = SoundFeedbackController(
         settingsStore: settingsStore, player: BundledSoundPlayer())
 
+    /// Güncelleme kontrolünün baktığı yer ve kabul ettiği imza. Depo herkese
+    /// açık olduğu için bu satırlar da denetlenebilir: Stash'in ağda konuştuğu
+    /// tek adres ve indirdiği bir binary'yi çalıştırmasının tek şartı burada.
+    private static let updateOwner = "selinihtyr"
+    private static let updateRepo = "stash-clipboard"
+    private static let updateAssetName = "Stash.zip"
+    private static let updateSignaturePolicy = CodeSignaturePolicy(
+        teamIdentifier: "HN964HX2UA", bundleIdentifier: "social.selin.stash")
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        setUpUpdateController()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.image = NSImage(systemSymbolName: "square.on.square.dashed",
                                      accessibilityDescription: "Stash")
@@ -134,8 +162,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // şey yok; başarısız olursa tek yapılabilecek kullanıcıyı bilgilendirmek.
         // Ayarlar penceresinden gelen değişiklikler ayrı bir yoldan
         // (reconcileHotKeyChange) geçer ve geri yükleme dener — bkz. openSettings.
-        if case .failure(let error) = attemptRegister(settingsStore.settings.combo) {
-            presentHotKeyAlert(for: error, combo: settingsStore.settings.combo)
+        if case .failure(let error) = hotKeyCoordinator.registerCurrent() {
+            presentHotKeyAlert(for: error, combo: hotKeyCoordinator.currentCombo)
         }
     }
 
@@ -182,8 +210,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.runModal()
     }
 
+    /// Sürüm bilgisi Info.plist'ten okunuyor: ikinci bir yerde sabit yazsaydık
+    /// `scripts/release.sh` birini güncelleyip diğerini unutabilir, uygulama da
+    /// zaten kurulu olan sürümü "yeni" diye önerebilirdi.
+    private func setUpUpdateController() {
+        let raw = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        guard let raw, let version = AppVersion(raw) else { return }
+        let controller = UpdateController(
+            client: GitHubReleaseClient(owner: Self.updateOwner, repo: Self.updateRepo,
+                                        userAgent: "Stash/\(raw) (+https://github.com/"
+                                            + "\(Self.updateOwner)/\(Self.updateRepo))"),
+            policy: Self.updateSignaturePolicy,
+            assetName: Self.updateAssetName,
+            currentVersion: version)
+        controller.automaticChecksEnabled = { [weak self] in
+            self?.settingsStore.settings.automaticUpdateChecks ?? false
+        }
+        controller.onStateChange = { [weak self] in self?.refreshUpdateMenuItem() }
+        updateController = controller
+        controller.startAutomaticChecks()
+    }
+
+    private func refreshUpdateMenuItem() {
+        guard let item = updateMenuItem, let controller = updateController else { return }
+        item.title = controller.menuTitle
+        item.isEnabled = controller.menuItemEnabled
+    }
+
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
+        // Güncelleme öğesi indirme sürerken kapalı görünmeli. AppKit'in
+        // otomatik etkinleştirmesi açık kalsaydı, hedefi seçiciye yanıt
+        // verdiği için öğeyi her zaman etkin çizerdi ve `isEnabled = false`
+        // hiçbir işe yaramazdı.
+        menu.autoenablesItems = false
         let openItem = menu.addItem(withTitle: "Open Stash", action: #selector(toggleStrip), keyEquivalent: "")
         openItem.target = self
         applyShortcut(settingsStore.settings.combo, to: openItem)
@@ -191,6 +251,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
             .target = self
+        // Güncelleme öğesinin BAŞLIĞI duruma göre değişiyor ("Check for
+        // Updates…" → "Update to 0.2.0…"): arka planda bulunan bir güncellemeyi
+        // kullanıcıya modal bir pencereyle dayatmak yerine menüde bekletiyoruz.
+        let updateItem = menu.addItem(withTitle: "Check for Updates…",
+                                      action: #selector(UpdateController.checkNow),
+                                      keyEquivalent: "")
+        updateItem.target = updateController
+        updateMenuItem = updateItem
+        refreshUpdateMenuItem()
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
@@ -219,15 +288,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsStore: settingsStore, store: store) { [weak self] updated in
                 guard let self else { return }
 
-                // reconcileHotKeyChange kombinasyon değişmediyse register'ı hiç
-                // çağırmaz — filtre/kara liste/raf değişikliklerinde gereksiz bir
+                // Karşılaştırma GERÇEKTEN KAYITLI olan kombinasyona karşı
+                // yapılıyor, `settingsStore.settings.combo`ya karşı değil: bu
+                // geri çağırım çalıştığında ayarlar penceresi paylaşılan
+                // mağazayı çoktan yeni kombinasyonla güncellemiş oluyor, o
+                // yüzden mağazadan okumak "değişmedi" yanılgısına düşerdi
+                // (bkz. HotKeyCoordinator).
+                //
+                // Kombinasyon değişmediyse register hiç çağrılmaz —
+                // filtre/kara liste/raf değişikliklerinde gereksiz bir
                 // unregister/register döngüsüne girmemek için (fix round 1,
                 // bulgu 1'in üçüncü parçası). Değiştiyse önce yeniyi dener,
                 // olmazsa kullanıcıyı kısayolsuz bırakmamak için eskiye döner —
                 // ve başarısız kombinasyon diske hiç yazılmaz.
-                let outcome = reconcileHotKeyChange(
-                    from: self.settingsStore.settings.combo, to: updated.combo,
-                    register: self.attemptRegister)
+                let outcome = self.hotKeyCoordinator.apply(updated.combo)
                 var finalSettings = updated
                 switch outcome {
                 case .applied(let combo):
