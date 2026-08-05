@@ -9,6 +9,16 @@ Sebep, "önceki kombinasyon"un ayarlar mağazasından okunmasıydı — ayarlar
 penceresi mağazayı bildirimden önce güncellediği için karşılaştırma her zaman
 "değişmedi" diyordu.
 
+**Düzeltildi — kısayol açılışta sessizce ölü kalabiliyordu.** Ölçüldü: temiz
+açılışların yaklaşık 5'te 1'i. `RegisterEventHotKey` `noErr` dönüyor, yani
+hiçbir hata görünmüyor, ama tuşa basınca hiçbir şey olmuyordu; menüden "Open
+Stash" çalıştığı için de sorun kısayola özeldi. Sebep: aynı anda çalışan ikinci
+bir kopya (ör. yeni sürümü eskisi kapanmadan açmak) aynı kombinasyonu
+kaydediyor, ölmekte olan kopya sistem yuvasını bizden sonra bırakıyor ve yuva
+boşta kalıyordu. Artık açılışta çalışan diğer kopyalar devralınıp kapatılıyor
+(veritabanına iki yazar da böylece engelleniyor) ve kayıt iki saniye sonra bir
+kez tazeleniyor. Zorla ikinci kopya açarak 3/3, art arda açılışta 8/8 doğrulandı.
+
 **Yeni — uygulama kendini güncelliyor.** Menüde "Check for Updates…". Günde bir
 GitHub'a yeni sürüm olup olmadığı soruluyor (Ayarlar > Updates'ten kapatılabilir);
 bulununca menü öğesi "Update to X…" oluyor, tıklayınca indirilip yerine
