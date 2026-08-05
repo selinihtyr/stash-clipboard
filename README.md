@@ -41,9 +41,13 @@ gets the file.
 the clipboard, so no clipboard manager can see them. Stash can watch the folder
 — opt-in, off by default, and only files macOS itself tags as screenshots.
 
-**Nothing leaves your Mac.** No network code at all — `grep -rn "URLSession"
-Sources` comes back empty. No account, no sync, no telemetry, and no
-third-party dependencies to audit.
+**Nothing about you leaves your Mac.** Your clipboard is never uploaded
+anywhere: no account, no sync, no telemetry, no third-party dependencies to
+audit. Stash makes exactly one kind of network request — once a day it asks
+GitHub whether a newer version exists, so you don't have to find out by
+accident. It sends nothing but a version-agnostic anonymous GET; you can read
+every line of it in `Sources/Updater/`, and you can switch it off in Settings,
+after which Stash never touches the network at all.
 
 **It doesn't lie to you.** If it can't paste, it says so instead of closing
 silently. If it only copied, the sound you hear is the copy sound. If your
@@ -69,7 +73,9 @@ database is corrupt it's moved aside, never deleted.
 
 ## Install
 
-No Homebrew formula and no signed release; build it from source.
+No Homebrew formula. Until a build is published on the
+[releases page](https://github.com/selinihtyr/stash-clipboard/releases), build
+it from source — after that, Stash keeps itself up to date (see Updating).
 
 ```bash
 git clone https://github.com/selinihtyr/stash-clipboard.git
@@ -81,6 +87,26 @@ open /Applications/Stash.app
 
 macOS may block an unsigned app on first launch: right-click Stash in
 `/Applications` and choose **Open**.
+
+### Updating
+
+Stash updates itself. It checks GitHub for a new release once a day; when there
+is one, the menu item turns into **Update to 0.x.y…**, and picking it downloads
+the build, verifies its signature, replaces the copy you're running and reopens
+it. Nothing to delete, nothing to download by hand.
+
+Two things worth knowing:
+
+- **The copy must be somewhere you can write to.** Stash checks this *before*
+  quitting, so a copy sitting in a read-only place says so instead of leaving
+  you with no app at all.
+- **If you built Stash yourself, the first update changes its signature** —
+  yours becomes the release identity — and macOS treats a differently-signed
+  app as a different one, so Accessibility has to be granted again (see
+  Signing, below). The update dialog says so before you agree to it.
+
+Prefer to stay on your own build? Turn off "Check for updates automatically" in
+Settings, and update the way you installed: `git pull && ./scripts/bundle.sh`.
 
 ### Signing — read this, or pasting will look broken
 
@@ -140,9 +166,20 @@ you can't lose a card while typing a search.
 - **By default it watches only the clipboard.** Screenshot-folder watching is
   the single feature that reaches beyond it, and it is opt-in and off by
   default.
-- **No network code.** Stash connects to nothing. You can verify it:
-  `grep -rn "URLSession\|import Network\|CFSocket\|NWConnection" Sources`
-  returns nothing.
+- **One network request, and it isn't about you.** Once a day Stash asks
+  `api.github.com` for the latest release of this repository. The request is
+  anonymous — no account, no identifier, no clipboard content, no telemetry,
+  and the URL session is `ephemeral` so nothing is cached or stored. You can
+  verify the scope of it: `grep -rln "URLSession\|import Network\|CFSocket"
+  Sources` matches one file, `Sources/Updater/ReleaseClient.swift`. Turn
+  "Check for updates automatically" off in Settings and Stash makes no
+  requests at all — checking then only happens if you pick "Check for
+  Updates…" from the menu yourself.
+- **An update is verified before it runs.** A downloaded build is rejected
+  unless it is signed by the identity that signs Stash (team `HN964HX2UA`,
+  pinned in `Sources/Updater/SignatureCheck.swift`), carries the expected
+  bundle identifier, and is the version it claimed to be. Rejected downloads
+  are deleted, not quarantined and forgotten.
 - **Password-manager content is never stored** — see above.
 - **Card numbers and tokens are masked** on the card face, revealed with a
   double-click.

@@ -18,6 +18,10 @@ let package = Package(
         .testTarget(name: "HotKeyTests", dependencies: ["HotKey"]),
         .target(name: "PasteEngine", dependencies: ["Filters"]),
         .testTarget(name: "PasteEngineTests", dependencies: ["PasteEngine", "Filters"]),
+        // Uygulamanın ağa çıkan TEK parçası kendi hedefinde duruyor: "Stash ne
+        // zaman ağa bağlanır?" sorusunun cevabı böylece tek bir klasör.
+        .target(name: "Updater"),
+        .testTarget(name: "UpdaterTests", dependencies: ["Updater"]),
         .target(name: "StashCore",
                 dependencies: ["Store", "PasteboardKit", "PasteEngine", "Filters", "HotKey"]),
         .testTarget(name: "StashCoreTests",
@@ -26,7 +30,8 @@ let package = Package(
         // kaynak paketleme/`Bundle.module` yolunu değil, `scripts/bundle.sh`nin
         // elle `Contents/Resources/Sounds`e kopyaladığı, `Bundle.main`den
         // okunan düz dosyaları izliyoruz (bkz. `SoundFeedback.swift`).
-        .executableTarget(name: "Stash", dependencies: ["StashCore", "HotKey", "PasteboardKit"],
+        .executableTarget(name: "Stash",
+                          dependencies: ["StashCore", "HotKey", "PasteboardKit", "Updater"],
                           exclude: ["Info.plist", "AppIcon.icns", "Resources/Sounds"]),
         .testTarget(name: "StashTests", dependencies: ["Stash"]),
     ]

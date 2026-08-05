@@ -17,6 +17,14 @@ public struct Settings: Codable, Sendable, Equatable {
     /// (görev kuralı 8: "opt-in") — kullanıcı bunu istemeden karşılaşmamalı,
     /// `soundsEnabled`in aksine (o zararsız, bu izin isteyen bir klasör okuması).
     public var screenshotWatchEnabled: Bool
+    /// Günde bir GitHub'a bakıp yeni sürüm olup olmadığını sorma. Varsayılan
+    /// AÇIK — `screenshotWatchEnabled`in aksine: o, kullanıcının klasörlerini
+    /// okuyan ve izin isteyen bir özellik; bu, hiçbir veri GÖNDERMEYEN tek
+    /// yönlü bir sorgu. Kapalı olsaydı, güncellemenin varlığından haberi
+    /// olmayan kullanıcı eski sürümde kalırdı — özelliğin tüm amacı buydu.
+    /// Anahtar yine de duruyor: ağa hiç çıkmayan bir Stash isteyen biri
+    /// kapatabilmeli.
+    public var automaticUpdateChecks: Bool
 
     // Açılışta başlatma burada YOK: o durumun tek doğruluk kaynağı
     // `LoginItem` (yani `SMAppService.mainApp.status`) — macOS zaten kalıcı
@@ -25,12 +33,14 @@ public struct Settings: Codable, Sendable, Equatable {
     // yaratırdı. Bkz. Sources/StashCore/LoginItem.swift.
     public init(combo: KeyCombo, activeFilters: [PasteFilter],
                 blockedBundleIDs: Set<String>, soundsEnabled: Bool = true,
-                screenshotWatchEnabled: Bool = false) {
+                screenshotWatchEnabled: Bool = false,
+                automaticUpdateChecks: Bool = true) {
         self.combo = combo
         self.activeFilters = activeFilters
         self.blockedBundleIDs = blockedBundleIDs
         self.soundsEnabled = soundsEnabled
         self.screenshotWatchEnabled = screenshotWatchEnabled
+        self.automaticUpdateChecks = automaticUpdateChecks
     }
 
     public static let defaults = Settings(
@@ -40,10 +50,12 @@ public struct Settings: Codable, Sendable, Equatable {
         // kara liste ikinci savunma hattı.
         blockedBundleIDs: ["com.1password.1password", "com.apple.keychainaccess"],
         soundsEnabled: true,
-        screenshotWatchEnabled: false)
+        screenshotWatchEnabled: false,
+        automaticUpdateChecks: true)
 
     private enum CodingKeys: String, CodingKey {
         case combo, activeFilters, blockedBundleIDs, soundsEnabled, screenshotWatchEnabled
+        case automaticUpdateChecks
     }
 
     // Elle yazılmış `init(from:)`: `soundsEnabled`den ÖNCE kaydedilmiş bir
@@ -68,6 +80,13 @@ public struct Settings: Codable, Sendable, Equatable {
         // olur" gerekçesi burada tam tersine dönüyor.
         screenshotWatchEnabled = try container.decodeIfPresent(
             Bool.self, forKey: .screenshotWatchEnabled) ?? false
+        // Eksik anahtar AÇIK'a düşüyor (`soundsEnabled` gerekçesi): güncelleme
+        // kontrolünden önce kaydedilmiş bir blob'u okuyan kullanıcı,
+        // güncellemesi olduğunu HİÇ öğrenemeyen tek kullanıcı olmamalı —
+        // özelliğin var oluş sebebi tam da bu (yorumdaki "silip yeniden
+        // indirmek zorunda kalmak"). Kapatmak isteyen Ayarlar'dan kapatır.
+        automaticUpdateChecks = try container.decodeIfPresent(
+            Bool.self, forKey: .automaticUpdateChecks) ?? true
     }
 
     private static let key = "settings"
