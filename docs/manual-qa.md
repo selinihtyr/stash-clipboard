@@ -73,6 +73,10 @@ Otomatik test edilemeyen davranışlar. Her sürümden önce gerçek makinede.
       ve YENİDEN BAŞLATMADAN yeni kısayola bas: şerit açılmalı.
 - [ ] Aynı oturumda eski kısayola bas: hiçbir şey olmamalı. (0.1.0'daki hata
       tam buydu — yeni kısayol ekranda görünüyor, kayıtlı olan eskisi kalıyordu.)
+- [ ] `open -n /Applications/Stash.app` ile ZORLA ikinci bir kopya aç. Tek
+      kopya kalmalı (`pgrep -x Stash | wc -l` = 1) ve kısayol çalışmaya devam
+      etmeli. (0.2.0 öncesi: iki kopya aynı kombinasyonu kaydediyor, eski
+      kopya ölürken yuvayı boşaltıyor ve kısayol sessizce ölüyordu.)
 - [ ] Başka bir uygulamanın kullandığı bir kombinasyonu seç (ör. ⌘Boşluk).
       Uyarı çıkmalı ve ESKİ kısayol çalışmaya devam etmeli — kısayolsuz
       kalınmamalı.

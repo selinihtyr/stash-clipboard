@@ -71,6 +71,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         teamIdentifier: "HN964HX2UA", bundleIdentifier: "social.selin.stash")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Her şeyden önce: çalışan başka bir kopya varsa devral. Kısayolu
+        // kaydetmeden önce olmak ZORUNDA — iki kopya aynı kombinasyonu
+        // kaydettiğinde ölmekte olan eski kopya sistem yuvasını boşaltıyor ve
+        // yeni kopyanın kaydı hiçbir hata vermeden ölü kalıyor
+        // (bkz. takeOverFromOtherInstances).
+        takeOverFromOtherInstances()
         setUpUpdateController()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.image = NSImage(systemSymbolName: "square.on.square.dashed",
@@ -164,6 +170,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // (reconcileHotKeyChange) geçer ve geri yükleme dener — bkz. openSettings.
         if case .failure(let error) = hotKeyCoordinator.registerCurrent() {
             presentHotKeyAlert(for: error, combo: hotKeyCoordinator.currentCombo)
+            return
+        }
+        refreshHotKeyAfterLaunch()
+    }
+
+    /// Açılıştan kısa süre sonra kaydı bir kez tazeler.
+    ///
+    /// Kayıt "başarılı" dönüp de tuşun hiç gelmediği bir durum var: açılış
+    /// sırasında ölmekte olan başka bir süreç (eski Stash kopyası ya da aynı
+    /// kombinasyonu tutan başka bir uygulama) sistemdeki yuvayı bizden SONRA
+    /// bırakırsa, elimizdeki `EventHotKeyRef` geçerli görünür ama olay
+    /// akmaz. Ölçüldü: temiz açılışların ~5'te 1'i böyle çıkıyordu, ve
+    /// kullanıcı bunu "Stash bozuldu" diye yaşıyor.
+    ///
+    /// `takeOverFromOtherInstances` bilinen sebebi ortadan kaldırıyor; bu
+    /// tazeleme, bilmediğimiz sebepler için ikinci savunma. Ucuz: iki saniye
+    /// sonra tek bir unregister/register çifti, kullanıcıya görünmeyen.
+    private func refreshHotKeyAfterLaunch() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            guard case .failure = hotKeyCoordinator.registerCurrent() else { return }
+            // Tazeleme başarısız olduysa `register` önce unregister ettiği için
+            // artık HİÇ kaydımız yok — sessizce geçmek kullanıcıyı kısayolsuz
+            // bırakırdı. Bir kez daha deniyoruz, o da olmazsa söylüyoruz.
+            if case .failure(let error) = hotKeyCoordinator.registerCurrent() {
+                presentHotKeyAlert(for: error, combo: hotKeyCoordinator.currentCombo)
+            }
         }
     }
 
