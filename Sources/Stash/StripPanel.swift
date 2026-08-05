@@ -53,12 +53,31 @@ final class StripPanel: NSPanel {
         // Aşağıdan yukarı kayma: önce ekranın altına gizle, sonra yerine sür.
         setFrame(frame.offsetBy(dx: 0, dy: -Self.height), display: false)
         makeKeyAndOrderFront(nil)
-        NSAnimationContext.runAnimationGroup { context in
+        NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.18
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             animator().setFrame(frame, display: true)
-        }
+        }, completionHandler: { [weak self] in
+            // Son kare GARANTİ altına alınıyor. Animasyon her zaman çalışmıyor:
+            // ekran uykudan yeni uyandığında, Erişilebilirlik > "Hareketi azalt"
+            // açıkken ya da pencere sunucusu animasyonları bastırdığında
+            // `animator()` hiçbir şey yapmıyor ve panel BAŞLANGIÇ konumunda —
+            // ekranın altında — kalıyor. Görünmüyor ama `isVisible` true, yani
+            // bir sonraki kısayol basışı onu "kapatıyor": kullanıcı için şerit
+            // bir daha hiç açılmıyor, üstelik menüden de açılmıyor. Ekranı
+            // uyutup uyandırarak birebir üretildi.
+            self?.setFrame(frame, display: true)
+        })
         installDismissMonitor()
+    }
+
+    /// Panelin gerçekten ekranda olup olmadığı. `isVisible` tek başına
+    /// yetmiyor: yukarıdaki takılma durumunda pencere "görünür" ama ekranın
+    /// dışında. `toggleStrip` buna bakmasa, takılmış bir paneli kapatmaya
+    /// çalışır ve kullanıcı şeridi bir daha hiç göremezdi.
+    var isShowingOnScreen: Bool {
+        isVisible && stripIsOnScreen(panelFrame: frame,
+                                     screens: NSScreen.screens.map(\.visibleFrame))
     }
 
     func dismiss() {
@@ -83,4 +102,14 @@ final class StripPanel: NSPanel {
     }
 
     override func cancelOperation(_ sender: Any?) { dismiss() }
+}
+
+/// Panelin herhangi bir ekranın görünür alanıyla kesişip kesişmediği.
+///
+/// Ayrı ve saf bir fonksiyon: gerçek bir ekran ya da pencere olmadan test
+/// edilebilsin diye. Kesişim şartı "tamamen içinde" değil — şerit, ekranın
+/// altına gizlenmiş halde bile bir pikselle kesişmemeli, ama iki ekran
+/// arasında yarım kalan bir panel de görünür sayılmalı.
+func stripIsOnScreen(panelFrame: NSRect, screens: [NSRect]) -> Bool {
+    screens.contains { $0.intersects(panelFrame) }
 }
