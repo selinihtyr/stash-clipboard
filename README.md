@@ -85,8 +85,16 @@ cp -R build/Stash.app /Applications/
 open /Applications/Stash.app
 ```
 
-macOS may block an unsigned app on first launch: right-click Stash in
-`/Applications` and choose **Open**.
+A build you made yourself opens without any Gatekeeper prompt — the files never
+came from the internet, so they were never quarantined.
+
+A build you **downloaded** is a different story. Stash is signed, but with a
+development certificate rather than a Developer ID, and it isn't notarized, so
+macOS refuses it on first launch ("Apple could not verify…"). On macOS 15 and
+later the old right-click → **Open** trick no longer works: open **System
+Settings → Privacy & Security**, find the message about Stash, and click **Open
+Anyway**. You only do this once — updates Stash installs itself don't go
+through Gatekeeper again.
 
 ### Updating
 
