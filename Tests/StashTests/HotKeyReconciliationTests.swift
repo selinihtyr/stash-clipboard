@@ -53,3 +53,66 @@ private let comboB = KeyCombo(keyCode: KeyCombo.keyCodeV, modifiers: KeyCombo.co
     let outcome = reconcileHotKeyChange(from: comboA, to: comboB) { _ in .failure(.alreadyTaken) }
     #expect(outcome == .revertFailed(attempted: comboB, previous: comboA, failureReason: .alreadyTaken))
 }
+
+// MARK: - HotKeyCoordinator
+//
+// v0.1'de bildirilen hata burada yaşıyordu: "önceki kombinasyon" paylaşılan
+// ayarlar mağazasından okunuyordu, ama ayarlar penceresi mağazayı onChange'i
+// çağırmadan ÖNCE güncelliyor — yani karşılaştırma yeniyi yeniyle
+// karşılaştırıyor, register hiç çağrılmıyor, eski kısayol kayıtlı kalıyordu.
+
+@Test @MainActor func coordinatorRegistersEvenWhenTheStoreWasUpdatedFirst() {
+    // Kullanıcının bildirdiği senaryonun birebir canlandırması: ayarlar
+    // penceresi combo'yu paylaşılan mağazaya yazdıktan SONRA apply çağrılıyor.
+    // Koordinatör kayıtlı kombinasyonu kendi tuttuğu için değişikliği yine de
+    // görmeli ve gerçekten kaydetmeli.
+    var settingsStoreCombo = comboA               // paylaşılan mağaza
+    var attempts: [KeyCombo] = []
+    let coordinator = HotKeyCoordinator(currentCombo: settingsStoreCombo) { combo in
+        attempts.append(combo)
+        return .success(())
+    }
+    settingsStoreCombo = comboB                   // pencere önce mağazayı günceller
+    let outcome = coordinator.apply(settingsStoreCombo)
+    #expect(attempts == [comboB])                 // hata varken burası boş kalıyordu
+    #expect(outcome == .applied(comboB))
+    #expect(coordinator.currentCombo == comboB)
+}
+
+@Test @MainActor func coordinatorSkipsRegistrationWhenTheComboIsUnchanged() {
+    // Kısayolla ilgisi olmayan ayar değişiklikleri (filtre, kara liste, ses)
+    // aynı yoldan geçiyor; bunlar gereksiz bir unregister/register döngüsü
+    // tetiklememeli.
+    var callCount = 0
+    let coordinator = HotKeyCoordinator(currentCombo: comboA) { _ in
+        callCount += 1
+        return .success(())
+    }
+    #expect(coordinator.apply(comboA) == .applied(comboA))
+    #expect(callCount == 0)
+}
+
+@Test @MainActor func coordinatorKeepsThePreviousComboAfterAFailedChange() {
+    // Reddedilen kombinasyondan sonra "kayıtlı olan" hâlâ eski kombinasyon:
+    // bir sonraki değişiklikte geri dönülecek aday da o olmalı, yoksa
+    // koordinatör hiç kaydolmamış bir kombinasyona dönmeye çalışırdı.
+    let coordinator = HotKeyCoordinator(currentCombo: comboA) { combo in
+        combo == comboB ? .failure(.alreadyTaken) : .success(())
+    }
+    #expect(coordinator.apply(comboB) == .reverted(to: comboA, failureReason: .alreadyTaken))
+    #expect(coordinator.currentCombo == comboA)
+}
+
+@Test @MainActor func coordinatorRegisterCurrentAlwaysAttemptsTheLaunchCombo() {
+    // Açılış yolu: apply(currentCombo) "değişmedi" deyip kaydı atlardı —
+    // uygulama hiç kısayolsuz açılırdı.
+    var attempts: [KeyCombo] = []
+    let coordinator = HotKeyCoordinator(currentCombo: comboA) { combo in
+        attempts.append(combo)
+        return .success(())
+    }
+    if case .failure(let error) = coordinator.registerCurrent() {
+        Issue.record("açılış kaydı başarısız oldu: \(error)")
+    }
+    #expect(attempts == [comboA])
+}

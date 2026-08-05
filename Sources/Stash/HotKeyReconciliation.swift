@@ -42,3 +42,56 @@ func reconcileHotKeyChange(
         }
     }
 }
+
+/// Şu an Carbon'a gerçekten kayıtlı olan kombinasyonun sahibi.
+///
+/// Bu tipin var olma sebebi bir hata: "önceki kombinasyon" `settingsStore`dan
+/// OKUNAMAZ. Ayarlar penceresi paylaşılan `settingsStore.settings`i önce
+/// güncelleyip sonra `onChange`i çağırıyor (SettingsView'daki `settings.combo =
+/// combo; onChange(settings)`), dolayısıyla geri çağırım çalıştığında mağazadaki
+/// değer zaten YENİ kombinasyon. `reconcileHotKeyChange(from: mağaza, to: yeni)`
+/// bu yüzden "kombinasyon değişmedi" görüp `register`ı hiç çağırmıyor,
+/// eski kısayol kayıtlı kalıyordu: kullanıcı Ayarlar'da yeni kısayolu görüyor,
+/// diske de o yazılıyor, ama şerit yeniden başlatana kadar hâlâ eskisiyle
+/// açılıyordu (v0.1 kullanıcı raporu).
+///
+/// Kayıtlı kombinasyon artık ayarlardan bağımsız burada tutuluyor: mağazayı kim
+/// ne zaman güncellerse güncellesin, karşılaştırma gerçekten kayıtlı olan
+/// değere karşı yapılıyor.
+@MainActor
+final class HotKeyCoordinator {
+    /// Son başarılı kaydın kombinasyonu. Kayıt başarısız olup geri dönüldüyse
+    /// geri dönülen kombinasyon; hiçbiri tutmadıysa (açılışta da başarısız)
+    /// yine de son istenen "çalışması beklenen" değer kalır — bir sonraki
+    /// değişiklikte geri dönülecek aday olarak doğru olan bu.
+    private(set) var currentCombo: KeyCombo
+    private let register: (KeyCombo) -> Result<Void, HotKeyError>
+
+    init(currentCombo: KeyCombo, register: @escaping (KeyCombo) -> Result<Void, HotKeyError>) {
+        self.currentCombo = currentCombo
+        self.register = register
+    }
+
+    /// Açılış kaydı: geri dönülecek "önceki çalışan kombinasyon" yok, o yüzden
+    /// `apply` değil bu kullanılıyor — `apply` aynı kombinasyonu görüp kaydı
+    /// hiç denemezdi.
+    func registerCurrent() -> Result<Void, HotKeyError> {
+        register(currentCombo)
+    }
+
+    /// Yeni kombinasyonu uygulamayı dener ve `currentCombo`yu sonuca göre
+    /// ilerletir. Dönen sonucu çağıran taraf (AppDelegate) kullanıcıya uyarı
+    /// göstermek ve diske yazmak için yorumluyor.
+    func apply(_ proposed: KeyCombo) -> HotKeyChangeOutcome {
+        let outcome = reconcileHotKeyChange(from: currentCombo, to: proposed, register: register)
+        switch outcome {
+        case .applied(let combo):
+            currentCombo = combo
+        case .reverted(let combo, _):
+            currentCombo = combo
+        case .revertFailed(_, let previous, _):
+            currentCombo = previous
+        }
+        return outcome
+    }
+}
