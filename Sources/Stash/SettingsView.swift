@@ -119,6 +119,26 @@ struct SettingsView: View {
                 Text("Also appears in the Login Items list in System Settings, where it can be turned off too.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Updates") {
+                Toggle("Check for updates automatically", isOn: Binding(
+                    get: { settings.automaticUpdateChecks },
+                    set: { newValue in
+                        settings.automaticUpdateChecks = newValue
+                        onChange(settings)
+                    }))
+                // Ne gönderildiğini açıkça yazmak, "hiçbir şey Mac'inizden
+                // çıkmaz" diyen bir uygulamanın ağa çıkan tek isteği için
+                // borcu: kullanıcı neyin gittiğini tahmin etmek zorunda
+                // kalmamalı.
+                Text("""
+                    Once a day, Stash asks GitHub whether a newer version exists \
+                    — the only network request it ever makes. It sends nothing \
+                    about you or your clipboard: no account, no identifier, no \
+                    telemetry. Turn this off and Stash never touches the network; \
+                    you can still check by hand from the menu.
+                    """)
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Sound") {
                 Toggle("Play a sound on copy and paste", isOn: Binding(
                     get: { settings.soundsEnabled },

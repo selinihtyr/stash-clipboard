@@ -67,3 +67,29 @@ Otomatik test edilemeyen davranışlar. Her sürümden önce gerçek makinede.
 - [ ] Bir kart numarası kopyala. Kartta maskeli görünmeli.
 - [ ] 20-30 ekran görüntüsü kopyala, Ayarlar'da disk boyutunun büyüdüğünü gör.
 - [ ] "Tümünü temizle" sonrası sabitlenen kartların kaldığını doğrula.
+
+## Kısayol
+- [ ] Ayarlar > Shortcut > Change ile yeni bir kombinasyon seç. Pencereyi kapat
+      ve YENİDEN BAŞLATMADAN yeni kısayola bas: şerit açılmalı.
+- [ ] Aynı oturumda eski kısayola bas: hiçbir şey olmamalı. (0.1.0'daki hata
+      tam buydu — yeni kısayol ekranda görünüyor, kayıtlı olan eskisi kalıyordu.)
+- [ ] Başka bir uygulamanın kullandığı bir kombinasyonu seç (ör. ⌘Boşluk).
+      Uyarı çıkmalı ve ESKİ kısayol çalışmaya devam etmeli — kısayolsuz
+      kalınmamalı.
+
+## Güncelleme
+- [ ] Menüde "Check for Updates…" var. Hiç sürüm yayınlanmamışken tıkla:
+      "No release has been published yet" demeli, kırmızı bir arıza gibi
+      görünmemeli.
+- [ ] Ayarlar > Updates anahtarını kapat, uygulamayı yeniden başlat ve
+      `nettop`/Little Snitch ile bak: kendiliğinden hiçbir istek çıkmamalı.
+- [ ] Yayınlanmış bir sürümden ESKİ bir sürüm çalıştır (Info.plist'te sürümü
+      düşürüp derle). Menü öğesi "Update to X…" olmalı; tıkla, indirsin,
+      Stash kapanıp yeni sürümle geri açılmalı. Menüdeki sürüm yeni olmalı.
+- [ ] Güncellemeden sonra pano geçmişi ve raflar yerinde olmalı (veriler
+      `~/Library/Application Support/Stash/`, bundle'ın içinde değil).
+- [ ] `/Applications` yerine salt okunur bir yere kopyalanmış bir Stash'te
+      güncellemeyi dene: KAPANMADAN önce "can't update in place" demeli.
+- [ ] Bozuk bir zip yayınla (ya da başka bir uygulamayı Stash.zip diye koy):
+      "wasn't signed by the same identity" deyip reddetmeli, çalışan kopya
+      olduğu gibi kalmalı.
