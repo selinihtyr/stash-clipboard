@@ -19,6 +19,16 @@ boşta kalıyordu. Artık açılışta çalışan diğer kopyalar devralınıp k
 (veritabanına iki yazar da böylece engelleniyor) ve kayıt iki saniye sonra bir
 kez tazeleniyor. Zorla ikinci kopya açarak 3/3, art arda açılışta 8/8 doğrulandı.
 
+**Düzeltildi — ekran uyuduktan sonra şerit bir daha açılmıyordu.** Şerit
+açılırken önce ekranın altına konup animasyonla yukarı kayıyor. Animasyon
+çalışmadığında (ekran uykudan yeni uyandığında, Erişilebilirlik > "Hareketi
+azalt" açıkken, pencere sunucusu animasyonları bastırdığında) panel başlangıç
+konumunda kalıyordu: görünmez, ama pencere "açık" sayıldığı için bir sonraki
+kısayol basışı onu kapatıyordu — kullanıcı için şerit ne kısayolla ne menüden
+açılıyor. Artık son kare garanti altında ve "açık mı" sorusu ekranla kesişime
+bakıyor, yani takılmış bir panel kendi kendine onarılıyor. Ekranı uyutup
+uyandırarak üretildi ve düzeltmeden sonra 2/2 doğrulandı.
+
 **Yeni — uygulama kendini güncelliyor.** Menüde "Check for Updates…". Günde bir
 GitHub'a yeni sürüm olup olmadığı soruluyor (Ayarlar > Updates'ten kapatılabilir);
 bulununca menü öğesi "Update to X…" oluyor, tıklayınca indirilip yerine

@@ -438,7 +438,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func toggleStrip() {
-        if let panel, panel.isVisible { panel.dismiss(); return }
+        // `isVisible` değil `isShowingOnScreen`: ekranın altında takılı kalmış
+        // bir panel "görünür" sayılıyor ve burada kapatılıyordu — kullanıcı
+        // şeridi bir daha hiç açamıyordu. Artık böyle bir panel yeniden
+        // gösteriliyor, yani durum kendi kendini onarıyor.
+        if let panel, panel.isShowingOnScreen { panel.dismiss(); return }
         guard let model else { return }
         try? model.reload()
         let host = NSHostingView(rootView: StripView(model: model))
