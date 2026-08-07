@@ -439,14 +439,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func toggleStrip() {
         // `isVisible` değil `isShowingOnScreen`: ekranın altında takılı kalmış
-        // bir panel "görünür" sayılıyor ve burada kapatılıyordu — kullanıcı
-        // şeridi bir daha hiç açamıyordu. Artık böyle bir panel yeniden
-        // gösteriliyor, yani durum kendi kendini onarıyor.
+        // ya da başka bir Space'e bağlanmış bir panel "görünür" sayılıyor ve
+        // burada kapatılıyordu — kullanıcı şeridi bir daha hiç açamıyordu.
+        // Artık böyle bir panel yeniden gösteriliyor, yani durum kendi kendini
+        // onarıyor.
         if let panel, panel.isShowingOnScreen { panel.dismiss(); return }
         guard let model else { return }
         try? model.reload()
+        presentStrip(model: model)
+    }
+
+    /// Şeridi gösterir ve GÖSTERDİĞİNİ DOĞRULAR.
+    ///
+    /// `StripPanel.show` kendi içinde bir onarım deniyor (bkz.
+    /// `orderFrontOnActiveSpace`). O da tutmazsa elimizdeki pencere nesnesi
+    /// kurtarılamıyor demektir: pencere sunucusunun o pencere için tuttuğu
+    /// Space bağı kalıcı olmuş olur. Sıfırdan kurulan bir `NSPanel` her zaman
+    /// aktif Space'e iliştirildiği için son çare bu — ve maliyeti yok, içerik
+    /// görünümü (`NSHostingView`) zaten her açılışta yeniden kuruluyor.
+    ///
+    /// Bunun alternatifi kullanıcının uygulamayı elle yeniden başlatması —
+    /// hatanın bildirilme sebebi tam olarak buydu.
+    private func presentStrip(model: StripModel) {
+        let panel = configuredPanel(model: model, reusing: self.panel)
+        panel.show(on: Self.screenWithMouse())
+        guard !panel.isShowingOnScreen else { self.panel = panel; return }
+        panel.retire()
+        let replacement = configuredPanel(model: model, reusing: nil)
+        replacement.show(on: Self.screenWithMouse())
+        self.panel = replacement
+    }
+
+    private func configuredPanel(model: StripModel, reusing existing: StripPanel?) -> StripPanel {
         let host = NSHostingView(rootView: StripView(model: model))
-        let panel = self.panel ?? StripPanel(contentView: host)
+        let panel = existing ?? StripPanel(contentView: host)
         panel.contentView = host
         // dismiss() panelin kapandığı HER yoldan geçer (Escape, tekrar
         // kısayola basma, dışarı tıklama) — süzgeci tek bir yerde temizlemek
@@ -483,8 +509,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return true
         }
-        self.panel = panel
-        panel.show(on: Self.screenWithMouse())
+        return panel
     }
 
     /// Şeridi kapatıp klavye odağını önce yapıştırılacak uygulamaya geri

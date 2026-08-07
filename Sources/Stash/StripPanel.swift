@@ -18,6 +18,11 @@ final class StripPanel: NSPanel {
     /// sessizce kırpıyordu.
     static var height: CGFloat { Theme.stripHeight }
 
+    /// Tek yerde: `show()` bunu her açılışta yeniden atıyor (bkz.
+    /// `orderFrontOnActiveSpace`), yani iki kopyası olamaz.
+    private static let stripBehavior: NSWindow.CollectionBehavior =
+        [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+
     init(contentView view: NSView) {
         super.init(contentRect: NSRect(x: 0, y: 0, width: 800, height: Self.height),
                    styleMask: [.nonactivatingPanel, .borderless],
@@ -25,7 +30,7 @@ final class StripPanel: NSPanel {
         self.contentView = view
         isFloatingPanel = true
         level = .floating
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        collectionBehavior = Self.stripBehavior
         backgroundColor = .clear
         isOpaque = false
         hasShadow = true
@@ -52,7 +57,7 @@ final class StripPanel: NSPanel {
                            width: area.width, height: Self.height)
         // Aşağıdan yukarı kayma: önce ekranın altına gizle, sonra yerine sür.
         setFrame(frame.offsetBy(dx: 0, dy: -Self.height), display: false)
-        makeKeyAndOrderFront(nil)
+        orderFrontOnActiveSpace()
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.18
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -71,19 +76,55 @@ final class StripPanel: NSPanel {
         installDismissMonitor()
     }
 
-    /// Panelin gerçekten ekranda olup olmadığı. `isVisible` tek başına
-    /// yetmiyor: yukarıdaki takılma durumunda pencere "görünür" ama ekranın
-    /// dışında. `toggleStrip` buna bakmasa, takılmış bir paneli kapatmaya
-    /// çalışır ve kullanıcı şeridi bir daha hiç göremezdi.
+    /// Paneli öne alır ve AKTİF Space'e bağlandığını doğrular.
+    ///
+    /// `.canJoinAllSpaces` "her Space'te görün" demek, ama ortamda tam ekran
+    /// bir Space varken pencere sunucusu paneli bazen tek bir Space'e
+    /// iliştiriyor ve orada bırakıyor. Sonuç: AppKit'e göre pencere `isVisible`,
+    /// çerçevesi de ekranla kesişiyor, ama kullanıcının baktığı Space'te
+    /// ÇİZİLMİYOR. Bu haldeyken her kısayol basışı onu görünmeden aç/kapa
+    /// yapıyor; kısayol da menüdeki "Open Stash" da ölü görünüyor ve tek çare
+    /// uygulamayı yeniden başlatmak oluyor.
+    ///
+    /// Onarım: paneli geri çekip `collectionBehavior`ı yeniden atamak, pencere
+    /// sunucusunu Space üyeliğini baştan hesaplamaya zorluyor.
+    private func orderFrontOnActiveSpace() {
+        makeKeyAndOrderFront(nil)
+        guard !isOnActiveSpace else { return }
+        orderOut(nil)
+        collectionBehavior = []
+        collectionBehavior = Self.stripBehavior
+        makeKeyAndOrderFront(nil)
+    }
+
+    /// Panelin kullanıcının GERÇEKTEN gördüğü bir pencere olup olmadığı.
+    /// Üç şartın üçü de ayrı bir hatadan geliyor:
+    /// - `isVisible`: hiç açılmamış panel.
+    /// - `isOnActiveSpace`: başka bir Space'e bağlanmış panel (yukarıya bak).
+    /// - ekran kesişimi: animasyon çalışmadığı için ekranın altında kalmış panel.
+    ///
+    /// `toggleStrip` buna bakıyor: üçünden biri bile tutmuyorsa panel "kapalı"
+    /// sayılır ve KAPATILMAK yerine yeniden gösterilir — yani her iki takılma
+    /// durumu da bir sonraki basışta kendi kendini onarır.
     var isShowingOnScreen: Bool {
-        isVisible && stripIsOnScreen(panelFrame: frame,
-                                     screens: NSScreen.screens.map(\.visibleFrame))
+        stripIsShowing(isVisible: isVisible,
+                       isOnActiveSpace: isOnActiveSpace,
+                       panelFrame: frame,
+                       screens: NSScreen.screens.map(\.visibleFrame))
     }
 
     func dismiss() {
         removeDismissMonitor()
         orderOut(nil)
         onDismiss?()
+    }
+
+    /// Kurtarılamayan paneli sessizce bırakır: `dismiss()` değil, çünkü bu bir
+    /// kullanıcı eylemi değil — `onDismiss` çalışsaydı kullanıcının yazdığı
+    /// süzgeç, panel daha görünmeden silinirdi.
+    func retire() {
+        removeDismissMonitor()
+        orderOut(nil)
     }
 
     /// Dışarı tıklamayı yakalar. Panel key olduğu için resignKey tek başına
@@ -112,4 +153,16 @@ final class StripPanel: NSPanel {
 /// arasında yarım kalan bir panel de görünür sayılmalı.
 func stripIsOnScreen(panelFrame: NSRect, screens: [NSRect]) -> Bool {
     screens.contains { $0.intersects(panelFrame) }
+}
+
+/// "Kullanıcı bu paneli şu anda görüyor mu?" sorusunun tamamı.
+///
+/// Ayrı ve saf: `NSWindow`un üç ayrı özelliğini birleştiren kural, gerçek bir
+/// pencere ya da tam ekran bir Space kurmadan test edilebilsin diye. Kuralın
+/// yönü kritik — şüphede kalırsak "kapalı" demeliyiz: yanlışlıkla "kapalı"
+/// demek fazladan bir kez göstermek demek, yanlışlıkla "açık" demek ise şeridin
+/// bir daha hiç açılmaması demek.
+func stripIsShowing(isVisible: Bool, isOnActiveSpace: Bool,
+                    panelFrame: NSRect, screens: [NSRect]) -> Bool {
+    isVisible && isOnActiveSpace && stripIsOnScreen(panelFrame: panelFrame, screens: screens)
 }

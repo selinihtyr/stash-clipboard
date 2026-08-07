@@ -1,5 +1,19 @@
 # Changelog
 
+## Yayımlanmamış
+
+**Düzeltildi — tam ekran bir uygulama varken şerit bir daha açılmıyordu.** Belirti
+0.2.0'da düzeltilenle birebir aynı ("ne kısayol ne menü çalışıyor, tek çare
+uygulamayı yeniden başlatmak") ama sebep başka: ortamda tam ekran bir Space
+varken pencere sunucusu paneli aktif OLMAYAN bir Space'e bağlıyor.
+`.canJoinAllSpaces` bunu engellemiyor. Panel AppKit'e göre görünür, çerçevesi de
+ekranla kesişiyor — yani "açık" sayılıp kapatılıyordu; kullanıcının baktığı
+Space'te ise hiç çizilmiyordu. Artık "açık mı" sorusu Space üyeliğini de soruyor,
+panel açılırken yanlış Space'e bağlandıysa kendini onarıyor, onaramazsa sıfırdan
+kuruluyor (yeni bir pencere her zaman aktif Space'e iliştirilir). Tam ekran
+Terminal + komşu Space'e geçiş ile üretildi: düzeltmeden önce üst üste üç ölü
+basış, sonra 4/4 doğru aç/kapa.
+
 ## 0.2.0
 
 **Düzeltildi — kısayolu değiştirmek işe yaramıyordu.** Ayarlar'dan yeni bir
